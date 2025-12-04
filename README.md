@@ -525,7 +525,7 @@ cd UE5_DedicatedServer
 
 
 - **Email**: [tlkj12@gmail.com]
-- **Portfolio**: [여기에 포트폴리오 주소]
+
 
 ## 📄 라이선스
 
