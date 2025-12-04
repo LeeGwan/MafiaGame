@@ -14,17 +14,17 @@
 - **인증 서버**: 회원가입/로그인, MySQL 연동, AES 암호화
 - **라우팅 서버**: 로드밸런싱, 서버 등록/관리
 - **세션 관리 서버**: 세션 검증, 하드웨어 정보 수집 (안티치트)
-- **게임 로비 서버**: 매칭 시스템, 데디케이티드 서버 할당
+- **게임 로비 서버**: 매칭 시스템, 데디케이티드 서버 할당 , 커널안티치트 관리
 - **언리얼 5.4 데디케이티드 서버**: 게임 로직 실행
 
 ### 2️⃣ 클라이언트
 - **DirectX11 + ImGui**: 커스텀 GUI 시스템
 - **WSAEventSelect 비동기 소켓**: 논블로킹 네트워크
 - **Thread Pool 패킷 처리**: AES 암호화/복호화
-- **커널 드라이버 안티치트**: 프로세스 보호, 하드웨어 핑거프린팅, 코드 무결성 검증
+- **커널 드라이버 안티치트**: 프로세스 보호, 하드웨어 정보 수집, 코드 무결성 검증
 
 ### 3️⃣ 게임 시스템
-- **6인 플레이어**: 마피아 2명, 경찰 1명, 탐정 1명, 시민 2명
+- **6인 플레이어**: 마피아 1명, 경찰 1명, 탐정 1명, 시민 3명
 - **페이즈 시스템**: 밤(행동) → 아침(결과) → 투표 → 유언 → 게임종료
 - **네트워크 복제**: Unreal Engine Replication 시스템
 - **RPC**: Server/Client/Multicast RPC
@@ -54,26 +54,26 @@
 
 ```
 ├── Server/
-│   ├── AuthServer/              # 인증 서버 (포트 8000)
+│   ├── AuthServer/              # 인증 서버
 │   │   ├── Network.h/cpp        # Epoll 네트워크 엔진
 │   │   ├── RoutineProgress.h/cpp # Thread Pool 패킷 처리
 │   │   └── MafiaDatabase.h/cpp  # MySQL 연동
 │   │
-│   ├── RoutingServer/           # 라우팅 서버 (포트 8000)
+│   ├── RoutingServer/           # 라우팅 서버
 │   │   ├── Network.h/cpp
 │   │   ├── ServerRegistry.h/cpp # 서버 등록/관리
 │   │   └── RoutineProgress.h/cpp
 │   │
-│   ├── SessionServer/           # 세션 관리 서버 (포트 8100)
+│   ├── SessionServer/           # 세션 관리 서버
 │   │   ├── SessionServer_Network.h/cpp
 │   │   ├── SessionManager.h/cpp # 세션 검증
 │   │   └── ClientInfo.h/cpp     # 하드웨어 정보 관리
 │   │
-│   ├── GameLobbyServer/         # 게임 로비 서버 (포트 8020)
+│   ├── GameLobbyServer/         # 게임 로비 서버
 │   │   ├── GameLobby_Network.h/cpp
 │   │   ├── DedicatedManger.h/cpp # 데디서버 할당
 │   │   ├── GameRoom.h/cpp       # 매칭 시스템
-│   │   └── SessionServerConnector.h/cpp
+│   │   └── SessionServerConnector.h/cpp # 세션서버 연결
 │   │
 │   └── UE5_DedicatedServer/     # 언리얼 5.4 데디서버
 │       ├── DedicatedGameMode.h/cpp
@@ -453,7 +453,7 @@ cd UE5_DedicatedServer
 ### 안티치트 드라이버 (Windows)
 ```bash
 # Windows Driver Kit (WDK) 필요
-1. Visual Studio 2022 + WDK 설치
+1. Visual Studio 2019 + WDK 설치
 2. AntiCheat_Driver.sln 열기
 3. Release/x64 빌드
 4. 테스트 서명 모드 활성화:
@@ -505,30 +505,26 @@ cd UE5_DedicatedServer
 
 ## 🔧 개발 환경
 
-- **OS**: Ubuntu 24.04 (Server), Windows 11 (Client)
-- **IDE**: Visual Studio Code, Visual Studio 2022
+- **OS**: Ubuntu 24.04 (Server), Windows 10 (Client)
+- **IDE**: Visual Studio Code, Visual Studio 2022 , Visual Studio 2019
 - **컴파일러**: GCC 13.2.0, MSVC 19.39
 - **빌드 시스템**: Makefile, MSBuild
 - **버전 관리**: Git
-- **드라이버**: Windows Driver Kit (WDK) 10.0.22621.0
+- **드라이버**: Windows Driver Kit (WDK) 10.0.22000.1
 
 ## 🔒 보안 고려사항
 
-### 안티치트 한계
+### 내 안티치트 한계
 - **테스트 서명 모드 필요**: 실제 배포 시 WHQL 인증 필요
-- **커널 드라이버 우회 가능성**: 하이퍼바이저 기반 치트는 탐지 불가
-- **CRC32 한계**: 고급 패치 기법으로 우회 가능
+- **커널 드라이버 우회 가능성**: 드라이버 탐지 검사를 별도로 수행하지 않음
+- **CRC32 한계**: CRC 무결성 검사는 타겟 프로세스에만 적용
+- **미니 필터 드라이버 후킹**: 미니 필터 드라이버를 통한 IRP 후킹 등 커널 기반 공격은 탐지 어려움
 
-### 개선 방안
-- HVCI (Hypervisor-protected Code Integrity) 통합
-- 드라이버 서명 강화 (EV 인증서)
-- 서버 사이드 검증 강화
-- 머신러닝 기반 이상 행동 탐지
 
 ## 📞 연락처
 
-- **GitHub**: [여기에 GitHub 주소]
-- **Email**: [여기에 이메일]
+
+- **Email**: [tlkj12@gmail.com]
 - **Portfolio**: [여기에 포트폴리오 주소]
 
 ## 📄 라이선스
@@ -537,4 +533,3 @@ cd UE5_DedicatedServer
 
 ---
 
-⭐ **Star를 눌러주시면 감사하겠습니다!**
