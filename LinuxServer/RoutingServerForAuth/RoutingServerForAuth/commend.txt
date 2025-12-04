@@ -1,0 +1,15 @@
+cd Desktop/RoutingServerForAuth/build/
+
+ulimit -n 65536
+export MALLOC_TRACE=memory_leak.log
+./RoutingServerForAuth
+
+mtrace ./RoutingServerForAuth memory_leak.log
+
+
+
+watch -n 2 'ps aux | grep RoutingServerForAuth'
+
+
+
+

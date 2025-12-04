@@ -1,0 +1,294 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="소스 파일\Core">
+      <UniqueIdentifier>{ea43be19-abd8-4888-a0bc-ad4a09a1d0cc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI">
+      <UniqueIdentifier>{80ac4617-c494-4f33-971b-b7ea5c8251b1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\window">
+      <UniqueIdentifier>{eea0495a-857a-436d-9637-206b6e7200f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\basegui">
+      <UniqueIdentifier>{8bb2e002-9c0a-46bd-8879-82c35d169fad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Core">
+      <UniqueIdentifier>{fa7c9828-2cb9-4349-b258-e04c0b8f39a2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\GuiControl">
+      <UniqueIdentifier>{038fbbfc-3c0e-4adf-9b55-3598d3d71d5d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Utils">
+      <UniqueIdentifier>{460e214f-0322-42da-a0f1-94bb284d18c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\LobbyGui">
+      <UniqueIdentifier>{ce8801fa-0bc2-451c-9829-48d6b692d81a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\LoginGui">
+      <UniqueIdentifier>{65267416-7a1e-410a-8b99-c6c9d564bc17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\RegisterGui">
+      <UniqueIdentifier>{9a9c3b32-2d81-4716-82e8-968eff768d56}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\InitGui">
+      <UniqueIdentifier>{fd11333b-7b51-4b0e-956a-80450e83527a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\ControlGui">
+      <UniqueIdentifier>{ad7db988-bcc1-48a8-a610-07c22bcff20f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Dependencies">
+      <UniqueIdentifier>{551fb430-7bfd-4b99-9d79-6ccb216ab4f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Network">
+      <UniqueIdentifier>{f848665b-8f2e-475f-97d7-f7f21e546562}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Network\Network">
+      <UniqueIdentifier>{a4ff8e65-8c41-4cb6-a1a9-e53270d25eba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Network\ServerType">
+      <UniqueIdentifier>{bbf8233a-6dfb-4ae7-b652-af9d43ab91a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Network\Aes">
+      <UniqueIdentifier>{f745c015-685a-4b66-8426-9a786c0c4a75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Network\Packet">
+      <UniqueIdentifier>{84bad567-8f8b-4050-989f-d06c6ea63989}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Event">
+      <UniqueIdentifier>{d080e3e2-12c1-4361-aa95-be92fe498600}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Event\EventManager">
+      <UniqueIdentifier>{087c80c9-0b03-4e4a-ba1c-017b880509e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Event\EventType">
+      <UniqueIdentifier>{0b83005c-2b82-429f-a1eb-17ad6bbdf6ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\Event\ProcessHandler">
+      <UniqueIdentifier>{b72138e9-e3b9-44b2-b231-7ce2f8e39f60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\MatchingGui">
+      <UniqueIdentifier>{b1f9ce59-0021-45b1-8fe4-669ff1d99406}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\AntiCheat">
+      <UniqueIdentifier>{f92acd14-0fdc-45b2-8522-3dcd8c31e94b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\ProcessManager">
+      <UniqueIdentifier>{a431be3d-658a-4bcf-9a87-90adc0b50b78}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core\GUI\GameGui">
+      <UniqueIdentifier>{81d000be-13a0-407f-b96e-97d20e3410b2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\window\window.cpp">
+      <Filter>소스 파일\Core\GUI\window</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Core\Core.cpp">
+      <Filter>소스 파일\Core\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\guicontrol\GuiControl.cpp">
+      <Filter>소스 파일\Core\GUI\GuiControl</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\basegui\BaseGui.cpp">
+      <Filter>소스 파일\Core\GUI\basegui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Utils\UtilsForString.cpp">
+      <Filter>소스 파일\Core\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\LobbyGui\LobbyGui.cpp">
+      <Filter>소스 파일\Core\GUI\LobbyGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\LoginGui\LoginGui.cpp">
+      <Filter>소스 파일\Core\GUI\LoginGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\RegisterGui\RegisterGui.cpp">
+      <Filter>소스 파일\Core\GUI\RegisterGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\InitGui\InitGui.cpp">
+      <Filter>소스 파일\Core\GUI\InitGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\ControlGui\ControlGui.cpp">
+      <Filter>소스 파일\Core\GUI\ControlGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_demo.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_draw.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_impl_dx11.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_impl_win32.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_tables.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencies\Imgui\imgui_widgets.cpp">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Network\NetWork.cpp">
+      <Filter>소스 파일\Core\Network\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Aes\Aes.cpp">
+      <Filter>소스 파일\Core\Network\Aes</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Packet\CompactBinaryReader\CompactBinaryReader.cpp">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Packet\RoutineProgress\RoutineProgress.cpp">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Packet\XXHash32\XXHash32.cpp">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Network\Packet\OptimizedBinaryPacketSerializer\OptimizedBinaryPacketSerializer.cpp">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Event\EventManager\EventManager.cpp">
+      <Filter>소스 파일\Core\Event\EventManager</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Event\ProcessHandler\ProcessHandler.cpp">
+      <Filter>소스 파일\Core\Event\ProcessHandler</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\MatchingGui\MatchingGui.cpp">
+      <Filter>소스 파일\Core\GUI\MatchingGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\AntiCheat\AntiCheat.cpp">
+      <Filter>소스 파일\Core\AntiCheat</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\gui\GameGui\GameGui.cpp">
+      <Filter>소스 파일\Core\GUI\GameGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\ProcessManager\ProcessManager.cpp">
+      <Filter>소스 파일\Core\ProcessManager</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Core\gui\window\window.h">
+      <Filter>소스 파일\Core\GUI\window</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Core\Core.h">
+      <Filter>소스 파일\Core\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\guicontrol\GuiControl.h">
+      <Filter>소스 파일\Core\GUI\GuiControl</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\EUIType\EUIType.h">
+      <Filter>소스 파일\Core\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\basegui\BaseGui.h">
+      <Filter>소스 파일\Core\GUI\basegui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Utils\UtilsForString.h">
+      <Filter>소스 파일\Core\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\LobbyGui\LobbyGui.h">
+      <Filter>소스 파일\Core\GUI\LobbyGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\LoginGui\LoginGui.h">
+      <Filter>소스 파일\Core\GUI\LoginGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\RegisterGui\RegisterGui.h">
+      <Filter>소스 파일\Core\GUI\RegisterGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\InitGui\InitGui.h">
+      <Filter>소스 파일\Core\GUI\InitGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\ControlGui\ControlGui.h">
+      <Filter>소스 파일\Core\GUI\ControlGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imconfig.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imgui.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imgui_impl_dx11.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imgui_impl_win32.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imgui_internal.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imstb_rectpack.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imstb_textedit.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\Imgui\imstb_truetype.h">
+      <Filter>소스 파일\Dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\ServerType\ServerType.h">
+      <Filter>소스 파일\Core\Network\ServerType</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Network\NetWork.h">
+      <Filter>소스 파일\Core\Network\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Aes\Aes.h">
+      <Filter>소스 파일\Core\Network\Aes</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Packet\CompactBinaryReader\CompactBinaryReader.h">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Packet\PacketStructure\PacketStructure.h">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Packet\RoutineProgress\RoutineProgress.h">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Packet\XXHash32\XXHash32.h">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Network\Packet\OptimizedBinaryPacketSerializer\OptimizedBinaryPacketSerializer.h">
+      <Filter>소스 파일\Core\Network\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Event\EventManager\EventManager.h">
+      <Filter>소스 파일\Core\Event\EventManager</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Event\EventType\EventType.h">
+      <Filter>소스 파일\Core\Event\EventType</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Event\ProcessHandler\ProcessHandler.h">
+      <Filter>소스 파일\Core\Event\ProcessHandler</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\MatchingGui\MatchingGui.h">
+      <Filter>소스 파일\Core\GUI\MatchingGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\AntiCheat\AntiCheat.h">
+      <Filter>소스 파일\Core\AntiCheat</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\AntiCheat\offset.h">
+      <Filter>소스 파일\Core\AntiCheat</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\gui\GameGui\GameGui.h">
+      <Filter>소스 파일\Core\GUI\GameGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ProcessManager\ProcessManager.h">
+      <Filter>소스 파일\Core\ProcessManager</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

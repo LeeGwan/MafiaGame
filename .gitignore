@@ -1,0 +1,139 @@
+# 빌드 결과물
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.map
+
+# Visual Studio
+.vs/
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+*.vcxproj.user
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+ipch/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.opendb
+
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+*.opensdf
+*.sdf
+*.suo
+*.sln
+*.xcodeproj
+*.xcworkspace
+
+# 드라이버
+*.sys
+*.cat
+*.inf
+*.cer
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Visual Studio Code
+.vscode/
+
+# 임시 파일
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+*~
+*.bak
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# MySQL
+*.sql.gz
+*.sql.bz2
+
+# 컴파일러 임시
+*.gch
+*.pch
+
+# 의존성
+node_modules/
+vendor/
+packages/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# 암호화 키 (절대 업로드 금지)
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_dsa
+
+# 설정 파일 (민감 정보 포함 가능)
+config.ini
+secrets.json
+.env
+
+# 테스트 결과
+TestResults/
+*.trx
+*.coverage
+
+# 패키지
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+
+
+# 기타
+*.stackdump
+core
+# 큰 파일들 (GitHub 100MB 제한)
+*.uasset
+*.ucas
+*.utoc
+*.pak
+*.ushaderbytecode
+*.uexp
+*.ubulk
+
+# Unreal Content
+Content/StarterContent/
+Content/Paks/

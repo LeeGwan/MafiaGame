@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Driver Files">
+      <UniqueIdentifier>{8E41214B-6785-4CFE-B992-037D68949A14}</UniqueIdentifier>
+      <Extensions>inf;inv;inx;mof;mc;</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Context">
+      <UniqueIdentifier>{ad290d0e-babd-41be-9d9a-1b0fc0d44906}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\crc">
+      <UniqueIdentifier>{52ea32de-ca9c-416f-81e4-1c71f5cf30b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\GetHardware">
+      <UniqueIdentifier>{2e295ed4-4adc-45e9-8c0c-6ed310795f7e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Context\HardwareContext">
+      <UniqueIdentifier>{3cc4c8d1-5eb2-4677-9827-485fbc31a0bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Context\HwSecurityProtocol">
+      <UniqueIdentifier>{88fdb23b-562c-400f-921c-1752049b01d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Context\SecurityAccessFlags">
+      <UniqueIdentifier>{52004500-176b-477b-98db-e57c10093ad6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ProcessGuard">
+      <UniqueIdentifier>{7d9b62b5-8f95-4c78-88d7-c8ce4805c08e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Context\ProcessCodeHash">
+      <UniqueIdentifier>{f6bf78be-ab13-4780-8933-f325e65e4ed8}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="AntiCheat.inf">
+      <Filter>Driver Files</Filter>
+    </Inf>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GetHardware\GetHardware.c">
+      <Filter>Source Files\GetHardware</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessGuard\ProcessGuard.c">
+      <Filter>Source Files\ProcessGuard</Filter>
+    </ClCompile>
+    <ClCompile Include="crc\crc.c">
+      <Filter>Source Files\crc</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Context\SecurityAccessFlags\SecurityAccessFlags.h">
+      <Filter>Source Files\Context\SecurityAccessFlags</Filter>
+    </ClInclude>
+    <ClInclude Include="Context\HwSecurityProtocol\HwSecurityProtocol.h">
+      <Filter>Source Files\Context\HwSecurityProtocol</Filter>
+    </ClInclude>
+    <ClInclude Include="GetHardware\GetHardware.h">
+      <Filter>Source Files\GetHardware</Filter>
+    </ClInclude>
+    <ClInclude Include="Context\HardWareContext\HardWareContext.h">
+      <Filter>Source Files\Context\HardwareContext</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessGuard\ProcessGuard.h">
+      <Filter>Source Files\ProcessGuard</Filter>
+    </ClInclude>
+    <ClInclude Include="crc\crc.h">
+      <Filter>Source Files\crc</Filter>
+    </ClInclude>
+    <ClInclude Include="Context\ProcessCodeHash\ProcessCodeHash.h">
+      <Filter>Source Files\Context\ProcessCodeHash</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
