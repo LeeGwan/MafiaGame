@@ -2,6 +2,9 @@
 #include "MafiaGameState.h"
 #include "Net/UnrealNetwork.h"
 
+/**
+ * @brief Constructor: Initializes global game state variables.
+ */
 AMafiaGameState::AMafiaGameState()
 {
     CurrentPhase = EGamePhase::Waiting;
@@ -14,23 +17,33 @@ AMafiaGameState::AMafiaGameState()
     PlayerStartLocations.Empty();
 }
 
-// 네트워크 복제 속성 등록
+/**
+ * @brief Configures properties for network replication using Unreal's DOREPLIFETIME system.
+ * Ensures critical game state data is synchronized from the server to all clients.
+ */
 void AMafiaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+    // Sync phase and timer information
     DOREPLIFETIME(AMafiaGameState, CurrentPhase);
     DOREPLIFETIME(AMafiaGameState, PhaseTimer);
+    
+    // Sync session and game progress data
     DOREPLIFETIME(AMafiaGameState, DayCount);
     DOREPLIFETIME(AMafiaGameState, MafiaCount);
     DOREPLIFETIME(AMafiaGameState, CitizenTeamCount);
     DOREPLIFETIME(AMafiaGameState, AlivePlayerCount);
     DOREPLIFETIME(AMafiaGameState, ExecutedPlayerId);
+    
+    // Sync identity and positional security data
     DOREPLIFETIME(AMafiaGameState, PlayerHashes);
     DOREPLIFETIME(AMafiaGameState, PlayerStartLocations);
 }
 
-// 현재 페이즈 설정 (서버 전용)
+/**
+ * @brief Updates the current game phase (Authority Only).
+ */
 void AMafiaGameState::SetCurrentPhase(EGamePhase NewPhase)
 {
     if (HasAuthority())
@@ -39,7 +52,9 @@ void AMafiaGameState::SetCurrentPhase(EGamePhase NewPhase)
     }
 }
 
-// 페이즈 타이머 설정 (서버 전용)
+/**
+ * @brief Updates the phase countdown timer (Authority Only).
+ */
 void AMafiaGameState::SetPhaseTimer(float NewTimer)
 {
     if (HasAuthority())
@@ -48,7 +63,9 @@ void AMafiaGameState::SetPhaseTimer(float NewTimer)
     }
 }
 
-// 날짜 설정 (서버 전용)
+/**
+ * @brief Increments or sets the current in-game day count (Authority Only).
+ */
 void AMafiaGameState::SetDayCount(int32 NewDay)
 {
     if (HasAuthority())
@@ -57,7 +74,9 @@ void AMafiaGameState::SetDayCount(int32 NewDay)
     }
 }
 
-// 마피아 생존자 수 설정 (서버 전용)
+/**
+ * @brief Updates the number of active Mafia members (Authority Only).
+ */
 void AMafiaGameState::SetMafiaCount(int32 Count)
 {
     if (HasAuthority())
@@ -66,7 +85,9 @@ void AMafiaGameState::SetMafiaCount(int32 Count)
     }
 }
 
-// 시민팀 생존자 수 설정 (서버 전용)
+/**
+ * @brief Updates the number of active Citizen team members (Authority Only).
+ */
 void AMafiaGameState::SetCitizenTeamCount(int32 Count)
 {
     if (HasAuthority())
@@ -75,7 +96,9 @@ void AMafiaGameState::SetCitizenTeamCount(int32 Count)
     }
 }
 
-// 총 생존자 수 설정 (서버 전용)
+/**
+ * @brief Updates the total count of living players (Authority Only).
+ */
 void AMafiaGameState::SetAlivePlayerCount(int32 Count)
 {
     if (HasAuthority())
@@ -84,7 +107,9 @@ void AMafiaGameState::SetAlivePlayerCount(int32 Count)
     }
 }
 
-// 처형된 플레이어 ID 설정 (서버 전용)
+/**
+ * @brief Stores the ID of the player currently targeted for execution (Authority Only).
+ */
 void AMafiaGameState::SetExecutedPlayerId(const FString& PlayerId)
 {
     if (HasAuthority())
@@ -93,7 +118,9 @@ void AMafiaGameState::SetExecutedPlayerId(const FString& PlayerId)
     }
 }
 
-// 플레이어 세션 토큰 목록 설정 (서버 전용)
+/**
+ * @brief Sets the full list of validated player session hashes (Authority Only).
+ */
 void AMafiaGameState::SetPlayerHashes(const TArray<FString>& Hashes)
 {
     if (HasAuthority())
@@ -102,7 +129,9 @@ void AMafiaGameState::SetPlayerHashes(const TArray<FString>& Hashes)
     }
 }
 
-// 플레이어 세션 토큰 추가 (서버 전용)
+/**
+ * @brief Appends a single player session hash to the registry (Authority Only).
+ */
 void AMafiaGameState::SetPlayerHash(const FString& Hashes)
 {
     if (HasAuthority())
@@ -111,7 +140,9 @@ void AMafiaGameState::SetPlayerHash(const FString& Hashes)
     }
 }
 
-// 특정 인덱스의 플레이어 세션 토큰 설정 (서버 전용)
+/**
+ * @brief Updates a session hash at a specific index (Authority Only).
+ */
 void AMafiaGameState::SetAtPlayerHash(int index, const FString& Hashes)
 {
     if (HasAuthority())
@@ -120,7 +151,9 @@ void AMafiaGameState::SetAtPlayerHash(int index, const FString& Hashes)
     }
 }
 
-// 플레이어 스폰 위치 추가 (서버 전용)
+/**
+ * @brief Registers a spawn location tied to a specific session hash (Authority Only).
+ */
 void AMafiaGameState::AddPlayerStartLocation(const FString& PlayerHash, FVector Location)
 {
     if (HasAuthority())
@@ -129,19 +162,24 @@ void AMafiaGameState::AddPlayerStartLocation(const FString& PlayerHash, FVector 
     }
 }
 
-// 플레이어 사망 알림 (모든 클라이언트)
+/**
+ * @brief [Multicast RPC] Broadcasts player death events to all clients for UI notification.
+ */
 void AMafiaGameState::MulticastNotifyPlayerDeath_Implementation(const FString& PlayerId, const FString& PlayerName)
 {
     if (GEngine)
     {
         GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red,
-            FString::Printf(TEXT("플레이어 %s가 사망했습니다"), *PlayerName));
+            FString::Printf(TEXT("Player %s has been eliminated"), *PlayerName));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("플레이어 %s (%s) 사망"), *PlayerId, *PlayerName);
+    UE_LOG(LogTemp, Warning, TEXT("Notification: Player %s (%s) eliminated"), *PlayerId, *PlayerName);
 }
 
-// 플레이어 세션 토큰으로 스폰 위치 찾기
+/**
+ * @brief Retrieves the designated spawn location associated with a unique session hash.
+ * @return FVector representing the spawn coordinates.
+ */
 FVector AMafiaGameState::GetPlayerStartLocationByHash(const FString& PlayerHash) const
 {
     for (const FPlayerStartData& Data : PlayerStartLocations)
@@ -154,30 +192,36 @@ FVector AMafiaGameState::GetPlayerStartLocationByHash(const FString& PlayerHash)
     return FVector::ZeroVector;
 }
 
-// 페이즈 변경 알림 (모든 클라이언트)
+/**
+ * @brief [Multicast RPC] Notifies all clients of a phase transition and synchronizes the timer.
+ */
 void AMafiaGameState::MulticastPhaseChanged_Implementation(EGamePhase NewPhase, float Duration)
 {
     CurrentPhase = NewPhase;
     PhaseTimer = Duration;
 
-    UE_LOG(LogTemp, Warning, TEXT("[GameState] 페이즈 변경: %d, 시간: %.0f초"), (int32)NewPhase, Duration);
+    UE_LOG(LogTemp, Warning, TEXT("[GameState] Phase Transition: %d, Duration: %.0f seconds"), (int32)NewPhase, Duration);
 }
 
-// 게임 종료 알림 (모든 클라이언트)
+/**
+ * @brief [Multicast RPC] Signals the end of the game and declares the winning faction.
+ */
 void AMafiaGameState::MulticastGameOver_Implementation(bool bMafiaWin)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[GameState] 게임 종료 - %s 승리!"),
-        bMafiaWin ? TEXT("마피아") : TEXT("시민팀"));
+    UE_LOG(LogTemp, Warning, TEXT("[GameState] Game Over - %s Team Wins!"),
+        bMafiaWin ? TEXT("Mafia") : TEXT("Citizen"));
 }
 
-// 유언 알림 (모든 클라이언트)
+/**
+ * @brief [Multicast RPC] Distributes the final message of an executed player to everyone.
+ */
 void AMafiaGameState::MulticastNotifyLastWords_Implementation(const FString& PlayerId, const FString& Words)
 {
     if (GEngine)
     {
         GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Yellow,
-            FString::Printf(TEXT("%s의 유언: %s"), *PlayerId, *Words));
+            FString::Printf(TEXT("%s's Last Words: %s"), *PlayerId, *Words));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("플레이어 %s의 유언: %s"), *PlayerId, *Words);
+    UE_LOG(LogTemp, Warning, TEXT("Last Words from %s: %s"), *PlayerId, *Words);
 }
