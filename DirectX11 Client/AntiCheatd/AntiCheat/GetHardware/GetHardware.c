@@ -1,12 +1,18 @@
-// 하드웨어 정보 수집 구현부
-// SMBIOS 테이블 파싱을 통한 메인보드 UUID 및 CPU ID 추출
+/**
+ * @file GetHardware.c
+ * @brief Implementation of hardware information gathering.
+ * @details SMBIOS table parsing to extract motherboard UUID and CPU ID.
+ */
+
 #include "GetHardware.h"
 #include "../Context/HardWareContext/HardWareContext.h"
 #include "../Context/HwSecurityProtocol/HwSecurityProtocol.h"
 #include <ntstrsafe.h>
 
-// 메인보드 시리얼 번호 (UUID) 가져오기
-// SMBIOS Type 1 (System Information)에서 UUID 추출
+/**
+ * @brief Get motherboard serial number (UUID).
+ * @details Extract UUID from SMBIOS Type 1 (System Information).
+ */
 NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
 {
     PHYSICAL_ADDRESS physicalAddress;
@@ -23,18 +29,18 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
 
     RtlZeroMemory(Buffer, BufferSize);
 
-    // SMBIOS 엔트리 포인트 검색 (0xF0000 ~ 0xFFFFF 영역)
+    // Search for SMBIOS entry point (0xF0000 ~ 0xFFFFF range)
     physicalAddress.QuadPart = 0xF0000;
     mappedAddress = MmMapIoSpace(physicalAddress, 0x10000, MmNonCached);
     if (!mappedAddress) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    // "_SM_" 시그니처 검색 (16바이트 단위)
+    // Search for "_SM_" signature (16-byte alignment)
     for (ULONG offset = 0; offset < 0x10000 - sizeof(SMBIOS_ENTRY_POINT); offset += 16) {
         PSMBIOS_ENTRY_POINT candidate = (PSMBIOS_ENTRY_POINT)((PUCHAR)mappedAddress + offset);
         if (RtlCompareMemory(candidate->Anchor, "_SM_", 4) == 4) {
-            // 체크섬 검증
+            // Checksum verification
             UCHAR checksum = 0;
             PUCHAR ptr = (PUCHAR)candidate;
             for (ULONG i = 0; i < candidate->Length; i++) {
@@ -52,7 +58,7 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
         return STATUS_NOT_FOUND;
     }
 
-    // SMBIOS 테이블 매핑
+    // Map SMBIOS table
     PHYSICAL_ADDRESS tablePhysAddr;
     tablePhysAddr.QuadPart = entryPoint->TableAddress;
     ULONG tableSize = entryPoint->TableLength;
@@ -66,13 +72,13 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
     tablePtr = (PUCHAR)smbiosTable;
     tableEnd = tablePtr + tableSize;
 
-    // Type 1 (System Information) 검색
+    // Search for Type 1 (System Information)
     while (tablePtr < tableEnd) {
         PSMBIOS_HEADER header = (PSMBIOS_HEADER)tablePtr;
         if (header->Type == 1) {
             PSMBIOS_SYSTEM_INFO sysInfo = (PSMBIOS_SYSTEM_INFO)header;
 
-            // UUID를 16진수 문자열로 변환 (32자리)
+            // Convert UUID to hex string (32 characters)
             RtlStringCchPrintfA(Buffer, BufferSize,
                 "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
                 sysInfo->UUID[0], sysInfo->UUID[1], sysInfo->UUID[2], sysInfo->UUID[3],
@@ -86,7 +92,7 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
             break;
         }
 
-        // 다음 구조체로 이동
+        // Move to next structure
         tablePtr += header->Length;
         while (tablePtr < tableEnd && (tablePtr[0] != 0 || tablePtr[1] != 0)) {
             tablePtr++;
@@ -94,7 +100,7 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
         tablePtr += 2;
     }
 
-    // UUID가 없으면 NONE
+    // If UUID not found, set to NONE
     if (status != STATUS_SUCCESS) {
         RtlStringCbCopyA(Buffer, BufferSize, "NONE");
         status = STATUS_SUCCESS;
@@ -104,8 +110,10 @@ NTSTATUS GetMainboardSerial(PCHAR Buffer, ULONG BufferSize)
     return status;
 }
 
-// CPU 정보 가져오기
-// SMBIOS Type 4 (Processor)에서 ProcessorID 추출 (중복 제거)
+/**
+ * @brief Get CPU information.
+ * @details Extract ProcessorID from SMBIOS Type 4 (Processor) with deduplication.
+ */
 NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
 {
     PHYSICAL_ADDRESS physicalAddress;
@@ -116,7 +124,7 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
     PUCHAR tableEnd;
     NTSTATUS status = STATUS_NOT_FOUND;
     ULONG currentPos = 0;
-    CHAR foundCPUs[8][17]; // 최대 8개 고유 CPU ID 저장
+    CHAR foundCPUs[8][17]; // Storage for up to 8 unique CPU IDs
     ULONG uniqueCount = 0;
 
     if (!Buffer || BufferSize == 0) {
@@ -126,14 +134,14 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
     RtlZeroMemory(Buffer, BufferSize);
     RtlZeroMemory(foundCPUs, sizeof(foundCPUs));
 
-    // SMBIOS 엔트리 포인트 검색
+    // Search for SMBIOS entry point
     physicalAddress.QuadPart = 0xF0000;
     mappedAddress = MmMapIoSpace(physicalAddress, 0x10000, MmNonCached);
     if (!mappedAddress) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    // "_SM_" 시그니처 검색
+    // Search for "_SM_" signature
     for (ULONG offset = 0; offset < 0x10000 - sizeof(SMBIOS_ENTRY_POINT); offset += 16) {
         PSMBIOS_ENTRY_POINT candidate = (PSMBIOS_ENTRY_POINT)((PUCHAR)mappedAddress + offset);
         if (RtlCompareMemory(candidate->Anchor, "_SM_", 4) == 4) {
@@ -154,7 +162,7 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
         return STATUS_NOT_FOUND;
     }
 
-    // SMBIOS 테이블 매핑
+    // Map SMBIOS table
     PHYSICAL_ADDRESS tablePhysAddr;
     tablePhysAddr.QuadPart = entryPoint->TableAddress;
     ULONG tableSize = entryPoint->TableLength;
@@ -168,14 +176,14 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
     tablePtr = (PUCHAR)smbiosTable;
     tableEnd = tablePtr + tableSize;
 
-    // 모든 Type 4 (Processor) 순회
+    // Traverse all Type 4 (Processor) structures
     while (tablePtr < tableEnd) {
         PSMBIOS_HEADER header = (PSMBIOS_HEADER)tablePtr;
 
         if (header->Type == 4) {
             PSMBIOS_PROCESSOR_INFO procInfo = (PSMBIOS_PROCESSOR_INFO)header;
 
-            // ProcessorID를 16진수 문자열로 변환
+            // Convert ProcessorID to hex string
             CHAR cpuId[17];
             RtlStringCchPrintfA(cpuId, sizeof(cpuId),
                 "%02X%02X%02X%02X%02X%02X%02X%02X",
@@ -184,7 +192,7 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
                 procInfo->ProcessorID[3], procInfo->ProcessorID[2],
                 procInfo->ProcessorID[1], procInfo->ProcessorID[0]);
 
-            // 중복 체크 (멀티코어 CPU는 동일한 ID를 가질 수 있음)
+            // Deduplication check
             BOOLEAN isDuplicate = FALSE;
             for (ULONG i = 0; i < uniqueCount; i++) {
                 if (strcmp(foundCPUs[i], cpuId) == 0) {
@@ -193,14 +201,14 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
                 }
             }
 
-            // 중복이 아니면 저장
+            // Save if unique
             if (!isDuplicate && uniqueCount < 8) {
                 RtlStringCchCopyA(foundCPUs[uniqueCount], sizeof(foundCPUs[0]), cpuId);
                 uniqueCount++;
             }
         }
 
-        // 다음 구조체로 이동
+        // Move to next structure
         tablePtr += header->Length;
         while (tablePtr < tableEnd && (tablePtr[0] != 0 || tablePtr[1] != 0)) {
             tablePtr++;
@@ -208,9 +216,8 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
         tablePtr += 2;
     }
 
-    // 중복 제거된 CPU ID들을 버퍼에 복사
+    // Copy deduplicated CPU IDs to buffer
     for (ULONG i = 0; i < uniqueCount; i++) {
-        // 구분자 추가 (첫 번째가 아니면)
         if (i > 0 && currentPos < BufferSize - 3) {
             Buffer[currentPos++] = ',';
             Buffer[currentPos++] = ' ';
@@ -224,7 +231,7 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
         }
     }
 
-    // CPU를 하나도 못 찾았으면
+    // If no CPUs found
     if (uniqueCount == 0) {
         RtlStringCbCopyA(Buffer, BufferSize, "NONE");
         status = STATUS_SUCCESS;
@@ -234,8 +241,10 @@ NTSTATUS GetCPUInfo(PCHAR Buffer, ULONG BufferSize)
     return status;
 }
 
-// SMBIOS 문자열 가져오기
-// 구조체 뒤에 null-terminated 문자열들이 연속으로 저장됨
+/**
+ * @brief Get SMBIOS string.
+ * @details SMBIOS strings are stored consecutively after the structure, null-terminated.
+ */
 PCHAR GetSMBIOSString(PUCHAR StringPtr, UCHAR StringIndex)
 {
     UCHAR currentIndex = 1;
@@ -259,7 +268,9 @@ PCHAR GetSMBIOSString(PUCHAR StringPtr, UCHAR StringIndex)
     return NULL;
 }
 
-// 하드웨어 정보 응답 메시지 생성 (TLV 구조)
+/**
+ * @brief Build hardware information response message (TLV structure).
+ */
 NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG MessageSize)
 {
     CHAR mainboardSerial[256] = { 0 };
@@ -270,25 +281,25 @@ NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG
     PUCHAR currentPtr = NULL;
     ULONG fieldCount = 0;
 
-    // 요청 타입에 따라 정보 수집
+    // Collect info based on request type
     switch (RequestType) {
     case HW_REQUEST_ALL:
         GetMainboardSerial(mainboardSerial, sizeof(mainboardSerial));
         GetCPUInfo(cpuInfo, sizeof(cpuInfo));
-        totalSize += sizeof(MESSAGE_FIELD) - 1 + strlen(mainboardSerial);
-        totalSize += sizeof(MESSAGE_FIELD) - 1 + strlen(cpuInfo);
+        totalSize += sizeof(MESSAGE_FIELD) - 1 + (ULONG)strlen(mainboardSerial);
+        totalSize += sizeof(MESSAGE_FIELD) - 1 + (ULONG)strlen(cpuInfo);
         fieldCount = 2;
         break;
 
     case HW_REQUEST_MAINBOARD:
         GetMainboardSerial(mainboardSerial, sizeof(mainboardSerial));
-        totalSize += sizeof(MESSAGE_FIELD) - 1 + strlen(mainboardSerial);
+        totalSize += sizeof(MESSAGE_FIELD) - 1 + (ULONG)strlen(mainboardSerial);
         fieldCount = 1;
         break;
 
     case HW_REQUEST_CPU:
         GetCPUInfo(cpuInfo, sizeof(cpuInfo));
-        totalSize += sizeof(MESSAGE_FIELD) - 1 + strlen(cpuInfo);
+        totalSize += sizeof(MESSAGE_FIELD) - 1 + (ULONG)strlen(cpuInfo);
         fieldCount = 1;
         break;
 
@@ -296,7 +307,7 @@ NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG
         return STATUS_INVALID_PARAMETER;
     }
 
-    // 응답 버퍼 동적 할당
+    // Allocate response buffer
     buffer = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, totalSize, 'wdHW');
     if (!buffer) {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -305,7 +316,7 @@ NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG
     RtlZeroMemory(buffer, totalSize);
     currentPtr = buffer;
 
-    // 메시지 헤더 작성
+    // Write message header
     static LONG g_MessageIdCounter = 0;
     PMESSAGE_HEADER header = (PMESSAGE_HEADER)currentPtr;
     header->MessageType = MSG_TYPE_HARDWARE_RESPONSE;
@@ -314,7 +325,7 @@ NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG
     header->Reserved = 0;
     currentPtr += sizeof(MESSAGE_HEADER);
 
-    // 메인보드 필드 추가
+    // Add motherboard field
     if (RequestType == HW_REQUEST_ALL || RequestType == HW_REQUEST_MAINBOARD) {
         PMESSAGE_FIELD field = (PMESSAGE_FIELD)currentPtr;
         field->FieldId = HW_REQUEST_MAINBOARD;
@@ -323,7 +334,7 @@ NTSTATUS BuildHardwareResponseMessage(ULONG RequestType, PUCHAR* Message, PULONG
         currentPtr += sizeof(MESSAGE_FIELD) - 1 + field->DataSize;
     }
 
-    // CPU 필드 추가
+    // Add CPU field
     if (RequestType == HW_REQUEST_ALL || RequestType == HW_REQUEST_CPU) {
         PMESSAGE_FIELD field = (PMESSAGE_FIELD)currentPtr;
         field->FieldId = HW_REQUEST_CPU;
