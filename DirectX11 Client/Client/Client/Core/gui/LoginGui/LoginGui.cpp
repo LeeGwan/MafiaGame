@@ -1,26 +1,44 @@
-// 로그인 화면 구현
+/**
+ * @file LoginGui.cpp
+ * @brief Implementation of the User Authentication (Login) interface.
+ */
+
 #include "LoginGui.h"
 #include "../guicontrol/GuiControl.h"
 #include "../EUIType/EUIType.h"
 
+/**
+ * @brief Renders the login interface for user credential input.
+ * Facilitates the secure transmission of ID and Password to the authentication controller.
+ */
 void LoginGui::Render()
 {
+    // --- Panel Configuration ---
     ImGui::Begin("##LoginPanel", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
+    // Adjust vertical alignment for a centered aesthetic
     ImGui::SetCursorPosY(300);
 
-    // 아이디 입력
-    ImGui::Text(u8"아이디:");
+    /** * @section Identification_Input 
+     * Captures the unique user identifier.
+     */
+    ImGui::Text("Username:");
     ImGui::InputText("##ID", parentGui->TempId, ID_PW_SIZE);
 
-    // 비밀번호 입력 (마스킹 처리)
-    ImGui::Text(u8"비밀번호:");
+    /** * @section Credential_Security 
+     * Secure input field for passwords. 
+     * Utilizes ImGuiInputTextFlags_Password to mask characters for data privacy.
+     */
+    ImGui::Text("Password:");
     ImGui::InputText("##Password", parentGui->TempPw, ID_PW_SIZE, ImGuiInputTextFlags_Password);
 
-    // 로그인 버튼
-    if (ImGui::Button(u8"로그인", ImVec2(290, 40))) {
+    ImGui::Spacing();
+
+    // --- Authentication Trigger ---
+    // Initiates the SignIn handshake via the UI controller
+    if (ImGui::Button("Sign In", ImVec2(290, 40))) {
         parentGui->SignIn(parentGui->TempId, parentGui->TempPw);
     }
 
