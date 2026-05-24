@@ -1,3 +1,5 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -8,51 +10,69 @@
 class AJobs;
 class ADirectionalLight;
 
-// 마피아 게임 데디케이티드 서버 게임모드
+/**
+ * @class ADedicatedGameMode
+ * @brief Orchestrates the core game loop, phase transitions, and server-authoritative logic for the Mafia Game.
+ * Handles player authentication via external lobby server, job assignment, and network-synchronized environment state.
+ */
 UCLASS(minimalapi)
 class ADedicatedGameMode : public AGameMode
 {
     GENERATED_BODY()
-protected:
-    TMap<FString, FString> NightActions; // 밤 행동 저장 (PlayerId -> TargetId)
-    TMap<FString, FString> VoteMap; // 투표 저장 (VoterId -> TargetId)
-    TMap<FString, TPair<FString, FString>> TempPlayerDataMap; // 임시 플레이어 데이터 (Hash -> <Name, IP>)
-    FString LastWords; // 유언
-    TQueue<FVector> SpawnPosition; // 스폰 위치 큐
-    TUniquePtr<ServerConnector> P_ServerConnector; // 게임 로비 서버 연결
 
 protected:
-    // 태양광 조명 (낮/밤 전환용)
+    /** Stores actions taken during the night phase (InstigatorID -> TargetID) */
+    TMap<FString, FString> NightActions;
+
+    /** Tracks votes cast during the voting phase (VoterID -> TargetID) */
+    TMap<FString, FString> VoteMap;
+
+    /** Temporary storage for authenticated player data during the login handshake (SessionHash -> <Name, IP>) */
+    TMap<FString, TPair<FString, FString>> TempPlayerDataMap;
+
+    /** Stores the final message submitted by the condemned player during Last Words phase */
+    FString LastWords;
+
+    /** Queue of available spawn locations parsed from the map's PlayerStarts */
+    TQueue<FVector> SpawnPosition;
+
+    /** Smart pointer to the custom socket connector for external lobby server communication */
+    TUniquePtr<ServerConnector> P_ServerConnector;
+
+protected:
+    /** Reference to the primary directional light for Time-of-Day (Day/Night) synchronization */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lighting", meta = (AllowPrivateAccess = "true"))
     ADirectionalLight* SunLight;
 
+    /** Current cached rotation of the sun to sync with newly joined players */
     UPROPERTY()
     FRotator CurrentSunRotation;
 
-    // 태양 회전 동기화 (멀티캐스트)
+    /** [NetMulticast RPC] Broadcasts sun rotation updates to all connected clients */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastUpdateSunRotation(FRotator NewRotation);
 
-    void SetDayTime(); // 낮 시간 설정
-    void SetNightTime(); // 밤 시간 설정
+    /** Environmental helpers to toggle visual lighting states */
+    void SetDayTime();
+    void SetNightTime();
 
-    const int32 REQUIRED_PLAYERS = 6; // 게임 시작 필요 인원
+    /** Configuration for game start requirements */
+    const int32 REQUIRED_PLAYERS = 6;
     int32 ConnectedPlayers;
 
-    // 페이즈 시간 설정 (테스트용 짧은 시간)
+    /** Phase Duration Settings (Shortened for testing/development) */
     const float NIGHT_DURATION = 30.0f;
     const float MORNING_DURATION = 30.0f;
     const float VOTING_DURATION = 30.0f;
     const float LASTWORDS_DURATION = 10.0f;
-    /*
-    const float NIGHT_DURATION = 120.0f;
-    const float MORNING_DURATION = 300.0f;
-    const float VOTING_DURATION = 120.0f;
-    const float LASTWORDS_DURATION = 10.0f;*/
 
+    /** Timer handle for managing scheduled phase transitions */
     FTimerHandle PhaseTimerHandle;
-    FVector ExecutionSiteLocation; // 처형장 위치
 
+    /** Calculated world location for the execution stand / pedestal */
+    FVector ExecutionSiteLocation;
+
+    /** Reference to the authoritative GameState for broadcasting global game data */
     UPROPERTY()
     class AMafiaGameState* MafiaGameState;
 
@@ -62,71 +82,82 @@ public:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
 
-    // 로그인 전처리 (게임 로비 서버와 연동)
+    /**
+     * @brief [Auth Override] Validates session hashes with the lobby server before allowing full connection.
+     */
     virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 
-    // 로그인 후처리 (플레이어 초기화)
+    /**
+     * @brief [Auth Override] Finalizes character spawning and player state initialization.
+     */
     virtual void PostLogin(APlayerController* NewPlayer) override;
 
     virtual void RestartPlayer(AController* NewPlayer) override;
 
-    void FindPlayerStarts(); // 스폰 위치 찾기
+    /** Map Parsing & Player Setup */
+    void FindPlayerStarts();
     void InitPlayerInformaion(APlayerController* NewPlayer, const FString& UniqueIdStr);
 
-    // 직업 할당 (마피아 2명, 경찰 1명, 탐정 1명, 시민 2명)
+    /**
+     * @brief Assigns randomized roles (2 Mafia, 1 Police, 1 Detective, 2 Citizens) to participants.
+     */
     UFUNCTION(BlueprintCallable)
     void AssignJobs();
 
-    // 게임 시작 (6명 모두 접속 시)
+    /** Starts the game session when the required player count is reached */
     UFUNCTION(BlueprintCallable)
     void StartGame();
 
-    // 페이즈 전환
-    void StartNightPhase(); // 밤 페이즈 (마피아/경찰/탐정 행동)
+    /** Game Phase Transition Management */
+    void StartNightPhase();
     auto WaitPlayerPhase();
-    void StartMorningPhase(); // 아침 페이즈 (밤 결과 공개)
-    void StartVotingPhase(); // 투표 페이즈
-    void StartLastWordsPhase(const FString& PlayerId); // 유언 페이즈
-    void ProcessExecution(); // 처형 실행
+    void StartMorningPhase();
+    void StartVotingPhase();
+    void StartLastWordsPhase(const FString& PlayerId);
+    void ProcessExecution();
     void OnPhaseTimeEnd();
 
-    // 밤 행동 처리 (서버 RPC)
+    /** [Server RPC] Handles player interaction during the Night phase (Killing/Investigating) */
     UFUNCTION(Server, Reliable)
     void ServerProcessNightAction(const FString& PlayerId, const FString& TargetId);
-    void ServerProcessNightAction_Implementation(const FString& PlayerId, const FString& TargetId);
-    void ProcessNightResults(); // 밤 결과 처리
+    
+    /** Resolves the outcome of all night actions simultaneously */
+    void ProcessNightResults();
 
-    // 투표 처리 (서버 RPC)
+    /** [Server RPC] Processes a vote cast by a player */
     UFUNCTION(Server, Reliable)
     void ServerCastVote(const FString& VoterId, const FString& TargetId);
-    void ProcessVotingResults(); // 투표 결과 처리
+    
+    /** Calculates voting results to determine majority and ties */
+    void ProcessVotingResults();
 
-    // 유언 제출 (서버 RPC)
+    /** [Server RPC] Submits the last words string from the accused player */
     UFUNCTION(Server, Reliable)
     void ServerSubmitLastWords(const FString& PlayerId, const FString& Words);
 
-    // 승리 조건 체크
+    /** Evaluates game state to determine if Mafia or Citizens have achieved victory */
     bool CheckWinCondition();
 
+    /** Helper to find a specific PlayerState using its session hash */
     class AMafiaPlayerState* FindPlayerStateByHash(const FString& PlayerHash);
 
-    // 모든 플레이어를 시작 위치로 이동 (멀티캐스트)
+    /** [NetMulticast RPC] Resets all living players to their assigned pedestals */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastMovePlayersToStart();
 
-    // 이동 활성화/비활성화 (멀티캐스트)
+    /** [NetMulticast RPC] Toggles movement component functionality for all pawns */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastSetMovementEnabled(bool bEnabled);
 
-    // 메시지 출력
+    /** Messaging & Feedback Helpers */
     void ALLUpdateMessage(int key, float delay, FColor col, const FString& Text);
     void UpdateMessage(class ADedicatedCharacter* Char, int key, float delay, FColor col, const FString& Text);
 
-    // 투표 업데이트 알림 (멀티캐스트)
+    /** [NetMulticast RPC] Notifies clients of a vote count change on a specific player */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastNotifyVoteUpdate(const FString& PlayerId, int32 NewVoteCount);
 
-    // 채팅 메시지 전송 (서버 RPC)
+    /** [Server RPC] Processes and filters chat messages based on game phase and life status */
     UFUNCTION(Server, Reliable)
     void ServerSendChatMessage(const FString& SenderHash, const FString& Message);
 };
