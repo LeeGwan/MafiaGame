@@ -1,10 +1,14 @@
-// CRC32 기반 프로세스 코드 무결성 검증 구현부
-// PE 파일의 .text 및 .rdata 섹션을 256바이트 단위로 분할하여 CRC32 해시 생성
-// 10초마다 메모리를 재검증하여 코드 변조 탐지
+/**
+ * @file crc.c
+ * @brief CRC32-based process code integrity verification implementation.
+ * @details Segments .text and .rdata sections into 256-byte chunks to generate CRC32 hashes
+ * and periodically re-verifies memory to detect code tampering.
+ */
+
 #include "crc.h"
 #include <Ntstrsafe.h>
 
-// 전역 변수 정의
+// --- Global Variables ---
 ULONG g_SelfFunctionSize = 0x1000;
 ULONG CRC32Table[256] = { 0 };
 BOOLEAN CRC32Initialized = FALSE;
@@ -13,7 +17,9 @@ ULONG g_process_code_hashCount = 0;
 BOOLEAN g_IntegrityCheckRunning = FALSE;
 PKTHREAD g_IntegrityCheckThread = NULL;
 
-// CRC32 룩업 테이블 초기화 (0xEDB88320 다항식 사용)
+/**
+ * @brief Initialize CRC32 lookup table using the 0xEDB88320 polynomial.
+ */
 VOID InitializeCRC32Table(VOID)
 {
     if (CRC32Initialized) {
@@ -36,7 +42,9 @@ VOID InitializeCRC32Table(VOID)
     CRC32Initialized = TRUE;
 }
 
-// CRC32 해시 계산
+/**
+ * @brief Calculate CRC32 hash.
+ */
 ULONG CalculateCRC32(PUCHAR Data, ULONG Length)
 {
     if (!CRC32Initialized) {
@@ -54,7 +62,9 @@ ULONG CalculateCRC32(PUCHAR Data, ULONG Length)
     return ~crc;
 }
 
-// 프로세스 메모리 읽기 (MmCopyVirtualMemory 사용)
+/**
+ * @brief Read process memory using MmCopyVirtualMemory.
+ */
 NTSTATUS ReadProcessMemory(PEPROCESS Process, PVOID Address, PVOID Buffer, SIZE_T Size)
 {
     NTSTATUS status;
@@ -64,7 +74,7 @@ NTSTATUS ReadProcessMemory(PEPROCESS Process, PVOID Address, PVOID Buffer, SIZE_
         return STATUS_INVALID_PARAMETER;
     }
 
-    // 다른 프로세스 메모리 읽기
+    // Read memory from target process
     status = MmCopyVirtualMemory(
         Process,
         Address,
@@ -90,7 +100,9 @@ NTSTATUS ReadProcessMemory(PEPROCESS Process, PVOID Address, PVOID Buffer, SIZE_
     return STATUS_SUCCESS;
 }
 
-// 프로세스의 메인 모듈 베이스 주소 가져오기 (PEB->ImageBaseAddress)
+/**
+ * @brief Get the base address of the process main module via PEB->ImageBaseAddress.
+ */
 PVOID GetProcessMainModuleBase(PEPROCESS Process)
 {
     KAPC_STATE apcState;
@@ -106,11 +118,11 @@ PVOID GetProcessMainModuleBase(PEPROCESS Process)
             return NULL;
         }
 
-        // 프로세스 컨텍스트로 전환
+        // Switch to process context
         KeStackAttachProcess((PKPROCESS)Process, &apcState);
 
         if (MmIsAddressValid(peb)) {
-            // PEB 오프셋 0x10에 ImageBaseAddress 위치
+            // ImageBaseAddress is located at offset 0x10 in PEB
             PVOID* pImageBase = (PVOID*)((PUCHAR)peb + 0x10);
             if (MmIsAddressValid(pImageBase)) {
                 imageBase = *pImageBase;
@@ -125,7 +137,9 @@ PVOID GetProcessMainModuleBase(PEPROCESS Process)
     }
 }
 
-// PE 파일의 .text 및 .rdata 섹션 찾기
+/**
+ * @brief Find .text and .rdata sections of the PE file.
+ */
 ULONG FindCodeSections(PEPROCESS Process, PVOID ImageBase, CODE_SECTION_INFO Sections[2])
 {
     KAPC_STATE apcState;
@@ -147,14 +161,14 @@ ULONG FindCodeSections(PEPROCESS Process, PVOID ImageBase, CODE_SECTION_INFO Sec
             goto Exit;
         }
 
-        // DOS 헤더 검증
+        // Verify DOS header
         PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)ImageBase;
         if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
             DbgPrint("Invalid DOS signature\n");
             goto Exit;
         }
 
-        // NT 헤더 검증
+        // Verify NT header
         PIMAGE_NT_HEADERS64 ntHeaders = (PIMAGE_NT_HEADERS64)((PUCHAR)ImageBase + dosHeader->e_lfanew);
         if (!MmIsAddressValid(ntHeaders)) {
             goto Exit;
@@ -165,14 +179,14 @@ ULONG FindCodeSections(PEPROCESS Process, PVOID ImageBase, CODE_SECTION_INFO Sec
             goto Exit;
         }
 
-        // 섹션 헤더 배열 시작 주소
+        // Section header array start address
         PIMAGE_SECTION_HEADER sectionHeader = (PIMAGE_SECTION_HEADER)(
             (PUCHAR)ntHeaders + sizeof(IMAGE_NT_HEADERS64)
             );
 
         USHORT numberOfSections = ntHeaders->FileHeader.NumberOfSections;
 
-        // 모든 섹션 순회하여 .text 및 .rdata 찾기
+        // Traverse all sections to find .text and .rdata
         for (USHORT i = 0; i < numberOfSections && foundCount < 2; i++) {
             if (!MmIsAddressValid(&sectionHeader[i])) {
                 break;
@@ -204,7 +218,9 @@ ULONG FindCodeSections(PEPROCESS Process, PVOID ImageBase, CODE_SECTION_INFO Sec
     }
 }
 
-// 프로세스 코드 해시 생성 (256바이트 단위)
+/**
+ * @brief Generate process code hash (256-byte chunks).
+ */
 NTSTATUS AddCRC(HANDLE ProcessId)
 {
     NTSTATUS status;
@@ -214,7 +230,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
     CODE_SECTION_INFO sections[2];
     ULONG totalChunkCount = 0;
 
-    // 프로세스 객체 가져오기
+    // Lookup process object
     status = PsLookupProcessByProcessId(ProcessId, &process);
     if (!NT_SUCCESS(status)) {
         DbgPrint("Failed to lookup process %d: 0x%08X\n",
@@ -222,7 +238,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
         return status;
     }
 
-    // 메인 모듈 베이스 주소 가져오기
+    // Get main module base address
     imageBase = GetProcessMainModuleBase(process);
     if (!imageBase) {
         DbgPrint("Failed to get base address for PID %d\n",
@@ -231,7 +247,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
         return STATUS_UNSUCCESSFUL;
     }
 
-    // .text 및 .rdata 섹션 찾기
+    // Find .text and .rdata sections
     ULONG sectionCount = FindCodeSections(process, imageBase, sections);
     if (sectionCount == 0) {
         DbgPrint("Failed to find code sections for PID %d\n",
@@ -240,12 +256,12 @@ NTSTATUS AddCRC(HANDLE ProcessId)
         return STATUS_UNSUCCESSFUL;
     }
 
-    // 전체 청크 개수 계산
+    // Calculate total number of chunks
     for (ULONG s = 0; s < sectionCount; s++) {
         totalChunkCount += (sections[s].Size + CODE_CHUNK_SIZE - 1) / CODE_CHUNK_SIZE;
     }
 
-    // 해시 배열 동적 할당
+    // Allocate hash array
     PULONG hashValues = (PULONG)ExAllocatePoolWithTag(
         NonPagedPool,
         totalChunkCount * sizeof(ULONG),
@@ -265,7 +281,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
 
     g_process_code_hash[g_process_code_hashCount].ProcessId = ProcessId;
 
-    // 코드 읽기용 버퍼 할당
+    // Allocate buffer for reading code
     codeBuffer = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, CODE_CHUNK_SIZE, 'hCIC');
     if (!codeBuffer) {
         ExFreePool(hashValues);
@@ -273,7 +289,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    // 각 섹션을 256바이트 단위로 분할하여 CRC32 계산
+    // Calculate CRC32 for each section, split into 256-byte chunks
     ULONG hashIndex = 0;
     for (ULONG s = 0; s < sectionCount; s++) {
         ULONG sectionSize = sections[s].Size;
@@ -284,7 +300,7 @@ NTSTATUS AddCRC(HANDLE ProcessId)
             ULONG offset = i * CODE_CHUNK_SIZE;
             ULONG currentChunkSize = CODE_CHUNK_SIZE;
 
-            // 마지막 청크는 크기가 작을 수 있음
+            // Last chunk may be smaller
             if (offset + CODE_CHUNK_SIZE > sectionSize) {
                 currentChunkSize = sectionSize - offset;
             }
@@ -303,13 +319,13 @@ NTSTATUS AddCRC(HANDLE ProcessId)
                 return status;
             }
 
-            // CRC32 해시 계산
+            // Calculate CRC32 hash
             hashValues[hashIndex] = CalculateCRC32(codeBuffer, currentChunkSize);
             hashIndex++;
         }
     }
 
-    // g_process_code_hash 배열에 저장
+    // Save to global hash array
     g_process_code_hash[g_process_code_hashCount].CodeBaseAddress = sections[0].Address;
     g_process_code_hash[g_process_code_hashCount].CodeSize = 0;
     for (ULONG s = 0; s < sectionCount; s++) {
@@ -332,7 +348,9 @@ NTSTATUS AddCRC(HANDLE ProcessId)
     return STATUS_SUCCESS;
 }
 
-// 프로세스 코드 해시 검증 (메모리 변조 탐지)
+/**
+ * @brief Verify process code hash (detect memory tampering).
+ */
 BOOLEAN ComputeProcessCodeHash(PPROCESS_CODE_HASH hashInfo)
 {
     NTSTATUS status;
@@ -358,7 +376,7 @@ BOOLEAN ComputeProcessCodeHash(PPROCESS_CODE_HASH hashInfo)
         return FALSE;
     }
 
-    // 각 청크를 읽어서 CRC32 재계산 후 비교
+    // Re-read each chunk, re-calculate CRC32, and compare
     ULONG hashIndex = 0;
     for (ULONG s = 0; s < hashInfo->SectionCount; s++) {
         ULONG sectionSize = hashInfo->Sections[s].Size;
@@ -383,10 +401,10 @@ BOOLEAN ComputeProcessCodeHash(PPROCESS_CODE_HASH hashInfo)
                 break;
             }
 
-            // 현재 CRC32 계산
+            // Calculate current CRC32
             ULONG currentHash = CalculateCRC32(codeBuffer, currentChunkSize);
 
-            // 원본 해시와 비교
+            // Compare with original hash
             if (currentHash != hashInfo->HashValues[hashIndex]) {
                 DbgPrint("[MemoryChanged]\n");
                 DbgPrint("========================================================\n");
@@ -415,7 +433,9 @@ BOOLEAN ComputeProcessCodeHash(PPROCESS_CODE_HASH hashInfo)
     return result;
 }
 
-// 무결성 검증 시스템 초기화
+/**
+ * @brief Initialize the integrity check system.
+ */
 NTSTATUS InitializeIntegrityCheck(VOID)
 {
     NTSTATUS status;
@@ -433,7 +453,7 @@ NTSTATUS InitializeIntegrityCheck(VOID)
 
     InitializeObjectAttributes(&objAttr, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
 
-    // 무결성 검증 스레드 생성
+    // Create system thread for integrity check
     status = PsCreateSystemThread(
         &threadHandle,
         THREAD_ALL_ACCESS,
@@ -450,7 +470,7 @@ NTSTATUS InitializeIntegrityCheck(VOID)
         return status;
     }
 
-    // 스레드 객체 참조
+    // Reference the thread object
     status = ObReferenceObjectByHandle(
         threadHandle,
         THREAD_ALL_ACCESS,
@@ -472,7 +492,9 @@ NTSTATUS InitializeIntegrityCheck(VOID)
     return STATUS_SUCCESS;
 }
 
-// 무결성 검증 시스템 종료
+/**
+ * @brief Shutdown the integrity check system.
+ */
 VOID StopIntegrityCheck(VOID)
 {
     if (!g_IntegrityCheckRunning) {
@@ -481,14 +503,14 @@ VOID StopIntegrityCheck(VOID)
 
     g_IntegrityCheckRunning = FALSE;
 
-    // 스레드 종료 대기
+    // Wait for thread termination
     if (g_IntegrityCheckThread) {
         KeWaitForSingleObject(g_IntegrityCheckThread, Executive, KernelMode, FALSE, NULL);
         ObDereferenceObject(g_IntegrityCheckThread);
         g_IntegrityCheckThread = NULL;
     }
 
-    // 해시 배열 해제
+    // Free hash arrays
     for (ULONG i = 0; i < 10; i++) {
         if (g_process_code_hash[i].HashValues != NULL) {
             ExFreePool(g_process_code_hash[i].HashValues);
@@ -499,28 +521,30 @@ VOID StopIntegrityCheck(VOID)
     RtlZeroMemory(g_process_code_hash, sizeof(g_process_code_hash));
 }
 
-// 무결성 검증 스레드 루틴 (10초마다 검증)
+/**
+ * @brief Integrity check thread routine (verifies every 10 seconds).
+ */
 VOID IntegrityCheckThreadRoutine(PVOID Context)
 {
     UNREFERENCED_PARAMETER(Context);
 
     while (g_IntegrityCheckRunning) {
-        // 등록된 모든 프로세스 검증
+        // Verify all registered processes
         if (g_process_code_hashCount > 0) {
             for (ULONG i = 0; i < 10; i++) {
                 if (g_process_code_hash[i].IsValid && g_process_code_hash[i].ProcessId != NULL) {
                     BOOLEAN result = ComputeProcessCodeHash(&g_process_code_hash[i]);
 
                     if (!result) {
-                        // 메모리 변조 탐지 시 추가 조치 가능
+                        // Additional action possible upon memory tampering detection
                     }
                 }
             }
         }
 
-        // 10초 대기
+        // Wait 10 seconds
         LARGE_INTEGER interval;
-        interval.QuadPart = -100000000LL;  // 10초 (100ns 단위)
+        interval.QuadPart = -100000000LL;  // 10 seconds (100ns units)
         KeDelayExecutionThread(KernelMode, FALSE, &interval);
     }
 
