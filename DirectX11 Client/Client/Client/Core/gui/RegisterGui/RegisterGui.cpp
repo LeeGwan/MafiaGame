@@ -1,30 +1,52 @@
-// 회원가입 화면 구현
+/**
+ * @file RegisterGui.cpp
+ * @brief Implementation of the Account Registration interface.
+ */
+
 #include "RegisterGui.h"
 #include "../guicontrol/GuiControl.h"
 #include "../EUIType/EUIType.h"
 
+/**
+ * @brief Renders the registration form for new account creation.
+ * Facilitates the collection of user credentials and initiates the sign-up handshake.
+ */
 void RegisterGui::Render()
 {
+    // --- Panel Configuration ---
+    // Initialize a fixed, non-interactive background panel for the registration form
     ImGui::Begin("##RegisterPanel", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
+    // Adjust vertical layout for centralized positioning
     ImGui::SetCursorPosY(300);
 
-    // 아이디 입력
-    ImGui::Text(u8"아이디:");
+    /** * @section Identification_Field
+     * Captures the desired username/ID for the new account.
+     */
+    ImGui::Text("Username:");
     ImGui::InputText("##ID", parentGui->TempId, ID_PW_SIZE);
 
-    // 비밀번호 입력
-    ImGui::Text(u8"비밀번호:");
+    /** * @section Primary_Credential_Field
+     * Captures the primary password. 
+     * Uses ImGuiInputTextFlags_Password to prevent visual credential exposure.
+     */
+    ImGui::Text("Password:");
     ImGui::InputText("##Password", parentGui->TempPw, ID_PW_SIZE, ImGuiInputTextFlags_Password);
 
-    // 비밀번호 확인 입력
-    ImGui::Text(u8"비밀번호확인:");
+    /** * @section Credential_Verification_Field
+     * Captures a secondary password entry to verify input integrity.
+     */
+    ImGui::Text("Confirm Password:");
     ImGui::InputText("##CheckPassword", parentGui->TempCheckPw, ID_PW_SIZE, ImGuiInputTextFlags_Password);
 
-    // 회원가입 버튼 (비밀번호 일치 여부는 SignUp에서 확인)
-    if (ImGui::Button(u8"회원가입", ImVec2(290, 40))) {
+    ImGui::Spacing();
+
+    // --- Registration Execution ---
+    // Triggers the SignUp logic via the UI controller.
+    // Note: Cross-field validation (e.g., matching passwords) is handled within the SignUp method.
+    if (ImGui::Button("Sign Up", ImVec2(290, 40))) {
         parentGui->SignUp(parentGui->TempId, parentGui->TempPw, parentGui->TempCheckPw);
     }
 
