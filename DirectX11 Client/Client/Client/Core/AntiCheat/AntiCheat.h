@@ -1,83 +1,120 @@
-// 커널 드라이버 기반 안티치트 시스템
-// ObRegisterCallbacks를 통한 프로세스 보호 및 하드웨어 지문 수집
+/**
+ * @file AntiCheat.h
+ * @brief Header for the Kernel-Mode Driver Controller and Security Manager.
+ * @details Interface for process protection via ObRegisterCallbacks and Hardware ID (HWID) telemetry.
+ */
+
 #pragma once
-#include"offset.h"
-#include<thread>
+#include "offset.h"
+#include <thread>
 #include <string>
 #include <atomic>
+#include <memory>
 
-enum class PacketType : uint8_t;  // 패킷 타입
-struct IntegrityCheckPacket;       // 하드웨어 정보 패킷
+// Forward declarations for networking and data structures
+enum class PacketType : uint8_t;
+struct IntegrityCheckPacket;
 
+/**
+ * @class AntiCheat
+ * @brief Manages the lifecycle and communication of the 'Flect' kernel driver.
+ * * This class implements high-level security features including anti-tampering,
+ * HWID spoof-detection, and real-time security alert monitoring.
+ */
 class AntiCheat
 {
 public:
     AntiCheat();
     ~AntiCheat();
 
-    // 안티치트 시스템 시작 (드라이버 등록, 시작, 연결)
+    /**
+     * @brief Bootstraps the security stack: Register -> Start -> Connect.
+     * @param hash Session hash for server-side verification.
+     * @return True if the driver is successfully active and linked.
+     */
     bool Start(const std::string hash);
 
-    // 드라이버 연결 상태 확인
+    /** @brief Checks the current atomic connection state of the driver. */
     bool IsConnected();
 
-    // 드라이버 연결 종료 및 리소스 정리
+    /** @brief Gracefully shuts down the monitoring loop and unregisters the kernel service. */
     void Disconnect();
 
-    // 하드웨어 정보 수집 및 서버 전송 (CPU ID, 메인보드 UUID)
+    /**
+     * @brief Requests HWID (CPU/Mainboard) from the kernel and dispatches to the server.
+     * @return True if hardware probes were successful.
+     */
     bool RequestHardwareInfo(PacketType type, const std::string& hash);
 
-    // 보호 대상 프로세스 추가 (pid=0이면 현재 프로세스)
+    /**
+     * @brief Registers a Process ID for kernel-level handle protection.
+     * @param pid Target PID. If 0, the current process is protected.
+     */
     bool AddProtectedPID(DWORD pid);
 
-    // 서버 하트비트 검증 (드라이버 상태, SendHeartbeat 성공 여부)
+    /**
+     * @brief Periodically validates driver integrity and heartbeat for the server.
+     * @param type PacketType for the response.
+     */
     void ServerCheckLogic(PacketType type);
 
 private:
-    // 드라이버 서비스 등록 (CreateService)
+    // --- Driver Service Lifecycle (SCM API) ---
+    
+    /** @brief Creates the driver entry in the Windows Service Control Manager. */
     bool RegisterDriver(DWORD startType = SERVICE_DEMAND_START);
 
-    // 공격 시도 이벤트 수집 (MAX_ALERTS개까지)
-    bool GetSecurityAlerts();
-
-    // 드라이버 시작 (StartService)
+    /** @brief Initiates the driver service start sequence. */
     bool StartDriver();
 
-    // 드라이버와 통신 채널 생성 (CreateFileW)
-    bool Connect();
-
-    // 드라이버 상태 확인 (SERVICE_RUNNING 여부)
-    bool GetDriverStatus();
-
-    // 드라이버 중지 (ControlService)
+    /** @brief Requests the driver service to stop. */
     bool StopDriver();
 
-    // 이벤트 루프 (공격 시도 모니터링)
+    /** @brief Verifies the current SCM status (e.g., SERVICE_RUNNING). */
+    bool GetDriverStatus();
+
+    // --- Communication & Monitoring ---
+
+    /** @brief Opens a handle to the driver's device object ("\\\\.\\Flect"). */
+    bool Connect();
+
+    /** @brief Worker thread: Periodically polls the driver for security violation logs. */
     void EventLoop();
 
-    // 하드웨어 정보 응답 파싱 (MESSAGE_HEADER + MESSAGE_FIELD)
+    /** @brief Retrieves the latest security alerts (Attacker PID/Name) from the kernel. */
+    bool GetSecurityAlerts();
+
+    /**
+     * @brief Deserializes kernel-mode hardware data into a user-mode structure.
+     * @param buffer Raw TLV buffer from the driver.
+     */
     bool ParseHardwareResponse(PUCHAR buffer, DWORD bufferSize, IntegrityCheckPacket& Packet);
 
-    // ObRegisterCallbacks 활성화 (IOCTL_SECURITY_CONTROL)
+    /** @brief Enables kernel-level ObRegisterCallbacks for process shield. */
     bool EnableProtection();
 
-    // 드라이버 하트비트 전송 (0x12345678 응답 확인)
+    /** @brief Sends a magic-value challenge (0x12345678) to verify driver responsiveness. */
     bool SendHeartbeat();
 
 private:
-    SC_HANDLE hSCManager;        // 서비스 관리자 핸들
-    SC_HANDLE hService;          // 드라이버 서비스 핸들
-    std::wstring serviceName;    // 서비스 이름 ("Flect")
-    std::wstring displayName;    // 표시 이름 ("Flect Simple Anticheat")
-    std::wstring driverPath;     // 드라이버 파일 경로 (.sys)
+    // --- Service Management Handles ---
+    SC_HANDLE hSCManager;        /**< Handle to the Service Control Manager database. */
+    SC_HANDLE hService;          /**< Handle to the specific driver service. */
+    
+    // --- Metadata & Paths ---
+    std::wstring serviceName;    /**< Registry name: "Flect". */
+    std::wstring displayName;    /**< Friendly name: "Flect Simple Anticheat". */
+    std::wstring driverPath;     /**< Absolute disk path to AntiCheat.sys. */
 
-    HANDLE m_hDevice;                   // 드라이버 디바이스 핸들
-    std::atomic<bool> m_isConnected;    // 드라이버 연결 상태
-    std::atomic<bool> m_shouldStop;     // 이벤트 루프 종료 플래그
-    std::thread m_EventThread;          // 이벤트 루프 스레드
-    std::string copy_hash;              // 해시 복사본
-    const std::wstring DEVICE_PATH = L"\\\\.\\Flect";  // 드라이버 디바이스 경로
+    // --- Communication & Threading ---
+    HANDLE m_hDevice;                   /**< Device communication handle (Ring 3 <-> Ring 0). */
+    std::atomic<bool> m_isConnected;    /**< Atomic flag for active driver link. */
+    std::atomic<bool> m_shouldStop;     /**< Atomic flag to terminate the monitoring loop. */
+    std::thread m_EventThread;          /**< Dedicated thread for security event polling. */
+    
+    std::string copy_hash;              /**< Cached session hash for packet building. */
+    const std::wstring DEVICE_PATH = L"\\\\.\\Flect"; /**< Symbolic link to the driver device. */
 };
 
-// 전역 싱글톤 인스턴스
+/** @brief Global access point for the AntiCheat orchestrator. */
 extern std::unique_ptr<AntiCheat> G_AntiCheat;
