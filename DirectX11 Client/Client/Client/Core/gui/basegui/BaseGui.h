@@ -1,24 +1,43 @@
-// GUI 베이스 클래스 (모든 GUI 화면의 부모 클래스)
+/**
+ * @file BaseGui.h
+ * @brief Definition of the abstract base class for all GUI components.
+ */
+
 #pragma once
 #include "../../../Dependencies/Imgui/imgui.h"
 
-class GuiControl;  // GUI 컨트롤러
+class GuiControl;
 
-// 추상 클래스 (순수 가상 함수 Render 포함)
+/**
+ * @class BaseGui
+ * @brief An abstract interface that defines the lifecycle and shared resources for GUI screens.
+ * * This class ensures that every derived GUI component implements a Render() routine 
+ * and maintains a reference to the central GuiControl for state transitions and logic execution.
+ */
 class BaseGui
 {
 public:
-	// 생성자: parentGui 포인터 저장
-	explicit BaseGui(GuiControl* parent) : parentGui(parent) {}
-	virtual ~BaseGui() = default;
+    /**
+     * @brief Constructor that establishes the link between the UI component and its controller.
+     * @param parent Pointer to the GuiControl instance managing this GUI.
+     */
+    explicit BaseGui(GuiControl* parent) : parentGui(parent) {}
 
-	// 순수 가상 함수 (자식 클래스에서 반드시 구현)
-	virtual void Render() = 0;
+    /** @brief Virtual destructor to ensure proper cleanup of derived GUI instances. */
+    virtual ~BaseGui() = default;
+
+    /**
+     * @brief Pure virtual function for rendering the UI.
+     * * Must be implemented by all derived classes (e.g., LoginGui, LobbyGui) 
+     * to define their specific ImGui drawing logic.
+     */
+    virtual void Render() = 0;
 
 protected:
-	GuiControl* parentGui;  // GUI 컨트롤러 참조 (SetUitype, SignIn 등 호출용)
+    /** Reference to the UI Controller used for triggering state changes (e.g., SetUitype) or network events. */
+    GuiControl* parentGui;
 
-	// 기본 패널 크기
-	const ImVec2 panelSize = ImVec2(350, 280);      // 일반 패널 크기
-	const ImVec2 InitpanelSize = ImVec2(1020, 680); // 초기 화면 패널 크기
+    /** Standardized layout constants for maintaining visual consistency across different panels. */
+    const ImVec2 panelSize = ImVec2(350, 280);      // Standard panel dimensions
+    const ImVec2 InitpanelSize = ImVec2(1020, 680); // Large-scale landing panel dimensions
 };
