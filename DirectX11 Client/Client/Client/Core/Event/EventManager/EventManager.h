@@ -1,74 +1,111 @@
-// 이벤트 관리자 (모듈 간 느슨한 결합을 위한 이벤트 기반 통신 시스템)
-// Observer 패턴으로 각 모듈이 직접 의존하지 않고 이벤트를 통해 통신
+/**
+ * @file EventManager.h
+ * @brief Header for the centralized event-driven communication system.
+ */
+
 #pragma once
-#include<functional>
+#include <functional>
 #include <vector>
 #include <memory>
 #include <unordered_map>
 #include <thread>
 
-enum class EventType : uint8_t;  // 이벤트 타입 열거형
-using QWORD = unsigned long long;  // 64비트 함수 포인터용
+// Forward declaration of EventType
+enum class EventType : uint8_t;
 
+/** @brief 64-bit function pointer representation for low-level memory mapping. */
+using QWORD = unsigned long long;
+
+/**
+ * @class EventManager
+ * @brief Implements an advanced Observer pattern for inter-module communication.
+ * * This manager allows modules to trigger and respond to events without direct 
+ * dependencies. It supports both synchronous and asynchronous execution 
+ * with hardware-level exception protection (SEH).
+ */
 class EventManager
 {
 private:
-	// 콜백 함수 정보 구조체
-	struct callback
-	{
-		QWORD* funcPtr;  // 멤버 함수 포인터 (QWORD로 변환)
-		void* thisPtr;   // 객체 인스턴스 포인터 (멤버 함수 호출 시 필요)
-	};
+    /**
+     * @struct callback
+     * @brief Metadata for registered event handlers.
+     */
+    struct callback
+    {
+        QWORD* funcPtr;  ///< Pointer to the member function logic.
+        void* thisPtr;   ///< Instance context (the 'this' pointer) for the call.
+    };
 
-	// 이벤트 타입별 콜백 함수 맵 (O(1) 조회)
-	std::unordered_map<EventType, callback> callbacks;
+    /** Hash map for O(1) lookup of event handlers. */
+    std::unordered_map<EventType, callback> callbacks;
 
 private:
-	// SEH를 적용한 안전한 이벤트 실행 (예외 발생 시 프로그램 크래시 방지)
-	void trigger_seh(EventType type, const std::function<void()>& fn);
+    /**
+     * @brief Internal wrapper to execute events within a Protected Exception block.
+     * @param type The EventType category.
+     * @param fn The wrapped execution logic.
+     */
+    void trigger_seh(EventType type, const std::function<void()>& fn);
 
 public:
-	EventManager();
-	~EventManager();
+    EventManager();
+    ~EventManager();
 
-	// 이벤트 타입에 콜백 함수 등록
-	void add_event(EventType type, void* thisPtr, QWORD* func);
+    /**
+     * @brief Registers a class member function as an event listener.
+     * @param type The event category to subscribe to.
+     * @param thisPtr Pointer to the instance owning the member function.
+     * @param func Raw address of the member function.
+     */
+    void add_event(EventType type, void* thisPtr, QWORD* func);
 
-	// 이벤트 트리거 (가변 인자 템플릿)
-	// wait: true이면 동기 실행(join), false이면 비동기 실행(detach)
-	template <typename... Args>
-	void trigger(EventType type, bool wait, const Args&... args)
-	{
-		// 이벤트 타입이 등록되어 있는지 확인
-		auto it = callbacks.find(type);
-		if (it != callbacks.end())
-		{
-			auto& cb = it->second;
+    /**
+     * @brief Dispatches an event to the registered listener.
+     * @tparam Args Variadic template arguments to pass to the callback.
+     * @param type The event category to trigger.
+     * @param wait If true, joins the thread (Sync); if false, detaches (Async).
+     * @param args The actual data arguments.
+     */
+    template <typename... Args>
+    void trigger(EventType type, bool wait, const Args&... args)
+    {
+        // O(1) Search for the registered handler
+        auto it = callbacks.find(type);
+        if (it != callbacks.end())
+        {
+            auto& cb = it->second;
 
-			// 새로운 스레드에서 콜백 함수 실행
-			std::thread triggerthread([this, cb, type, args...]
-				{
-					// SEH를 적용하여 안전하게 실행
-					trigger_seh(type, [cb, &args...]()
-						{
-							// 멤버 함수 포인터를 실제 함수 타입으로 변환
-							using callFunc = void(__thiscall*)(void*, Args...);
-							auto func = reinterpret_cast<callFunc>(cb.funcPtr);
+            /**
+             * Dedicated execution thread to prevent blocking the caller.
+             * Captures callback metadata and variadic arguments.
+             */
+            std::thread triggerthread([this, cb, type, args...]
+                {
+                    // Execute within SEH protection gate
+                    trigger_seh(type, [cb, &args...]()
+                        {
+                            /**
+                             * @section Low_Level_Invocation
+                             * Reinterprets the raw pointer as a __thiscall member function.
+                             * Format: void(Instance* this, Arguments...)
+                             */
+                            using callFunc = void(__thiscall*)(void*, Args...);
+                            auto func = reinterpret_cast<callFunc>(cb.funcPtr);
 
-							// 멤버 함수 호출 (this 포인터 + 인자들)
-							func(cb.thisPtr, args...);
-						});
-				});
+                            // Execute member function with provided context
+                            func(cb.thisPtr, args...);
+                        });
+                });
 
-			// 동기/비동기 선택
-			if (wait)
-			{
-				triggerthread.join();  // 스레드 종료 대기 (동기)
-			}
-			else
-			{
-				triggerthread.detach();  // 스레드 독립 실행 (비동기)
-			}
-		}
-	}
+            // Synchronicity management
+            if (wait)
+            {
+                triggerthread.join();  // Wait for completion (Blocking)
+            }
+            else
+            {
+                triggerthread.detach(); // Fire and forget (Non-blocking)
+            }
+        }
+    }
 };
