@@ -1,4 +1,8 @@
-// 비동기 네트워크 클라이언트 구현 (WSAEventSelect 기반)
+/**
+ * @file NetWork.cpp
+ * @brief Implementation of the asynchronous network client using the WSAEventSelect model.
+ */
+
 #include "NetWork.h"
 #include "../ServerType/ServerType.h"
 #include "../Packet/RoutineProgress/RoutineProgress.h"
@@ -8,86 +12,81 @@
 #include "../../Core/Core.h"
 #include "../../Event/EventManager/EventManager.h"
 #include "../../Event/EventType/EventType.h"
+
+/** Global Singleton Instance for Network Orchestration */
 std::unique_ptr<NetWork> G_network = std::make_unique<NetWork>();
 
-// 생성자: 라우팅 서버(포트 8000), 게임 로비 서버(포트 8020) IP/포트 설정
-NetWork::NetWork() :currentSocket(INVALID_SOCKET), networkEvent(WSA_INVALID_EVENT), running(false), CurrentState(ServerType::WAIT)
+/**
+ * @brief Constructor: Initializes server endpoints and internal states.
+ * * Configures default routing and lobby server addresses.
+ */
+NetWork::NetWork() : currentSocket(INVALID_SOCKET), networkEvent(WSA_INVALID_EVENT), running(false), CurrentState(ServerType::WAIT)
 {
+    // Internal endpoint configuration
     routineServerIP = "172.30.1.53";
     lobbyServerIP = "172.30.1.60";
     routineServerPort = htons(8000);
     lobbyServerPort = htons(8020);
 }
-NetWork::~NetWork()
-{
-    CleanUp();
-}
 
-// WinSock 초기화 및 이벤트/송신 스레드 시작
+NetWork::~NetWork() { CleanUp(); }
+
+/**
+ * @brief Bootstraps WinSock and launches asynchronous processing threads.
+ */
 bool NetWork::Initialize()
 {
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
 
     networkEvent = WSACreateEvent();
-    if (networkEvent == WSA_INVALID_EVENT)
-    {
-
-        return false;
-    }
+    if (networkEvent == WSA_INVALID_EVENT) return false;
 
     running.store(true);
+    
+    // Launch dedicated threads for the I/O event loop and the egress (send) queue
     EventThread = std::thread(&NetWork::EventLoop, this);
     sendthread = std::thread(&NetWork::SendLoop, this);
 
     return true;
 }
 
-// 라우팅 서버 연결 (인증 서버 IP 획득용, 포트 8000)
+// --- Connection Dispatchers ---
+
 bool NetWork::ConnectToRoutinAuthServer()
 {
     CurrentState.store(ServerType::ROUTINEAUTHSERVER);
-    return   ConnectToServer(routineServerIP, routineServerPort);;
+    return ConnectToServer(routineServerIP, routineServerPort);
 }
 
-// 인증 서버 연결 (라우팅 서버로부터 받은 IP/포트)
 bool NetWork::ConnectToAuthServer(const std::string& ip, int port)
 {
     CurrentState.store(ServerType::AUTHSERVER);
     return ConnectToServer(ip, port);
-
 }
 
-// 게임 로비 서버 연결 (포트 8020, 안티치트 연결 확인 후)
 bool NetWork::ConnectToGameLobbyServer()
 {
     std::string hash = G_GuiControl->hash;
-    if (hash.empty())return false;
-    if (!G_AntiCheat->IsConnected())return false;
-    if (!ConnectToServer(lobbyServerIP, lobbyServerPort))return false;
+    // Security Gate: Ensure anti-cheat is active before lobby entry
+    if (hash.empty() || !G_AntiCheat->IsConnected()) return false;
 
+    if (!ConnectToServer(lobbyServerIP, lobbyServerPort)) return false;
     CurrentState.store(ServerType::GAMELOBBYSERVER);
-
-
-
-
+    return true;
 }
 
-// TCP 소켓 생성 및 비동기 연결 (WSAEventSelect로 FD_CONNECT, FD_READ, FD_CLOSE 등록)
+/**
+ * @brief Establishes a TCP connection and registers async events.
+ * * Uses WSAEventSelect for non-blocking notification of Connect, Read, and Close events.
+ */
 bool NetWork::ConnectToServer(const std::string& ip, int port)
 {
-    int error = 0;
     currentSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (currentSocket == INVALID_SOCKET) {
-        error = WSAGetLastError();
-        return false;
-    }
+    if (currentSocket == INVALID_SOCKET) return false;
 
-    if (WSAEventSelect(currentSocket, networkEvent,
-        FD_CONNECT | FD_READ | FD_CLOSE) == SOCKET_ERROR) {
-
-        return false;
-    }
+    // Register WinSock events to the networkEvent object
+    if (WSAEventSelect(currentSocket, networkEvent, FD_CONNECT | FD_READ | FD_CLOSE) == SOCKET_ERROR) return false;
 
     sockaddr_in serverAddr = {};
     serverAddr.sin_family = AF_INET;
@@ -96,16 +95,15 @@ bool NetWork::ConnectToServer(const std::string& ip, int port)
 
     if (connect(currentSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
-        if (WSAGetLastError() != WSAEWOULDBLOCK)
-        {
-
-            return false;
-        }
+        if (WSAGetLastError() != WSAEWOULDBLOCK) return false;
     }
     return true;
 }
 
-// WSAWaitForMultipleEvents 루프 (FD_CONNECT, FD_READ, FD_CLOSE 이벤트 처리)
+/**
+ * @brief Main I/O Event Loop (Worker Thread).
+ * * Monitors the WSAEvent object and dispatches notifications to appropriate handlers.
+ */
 void NetWork::EventLoop()
 {
     while (running.load())
@@ -116,101 +114,50 @@ void NetWork::EventLoop()
             WSANETWORKEVENTS networkEvents;
             if (WSAEnumNetworkEvents(currentSocket, networkEvent, &networkEvents) == 0)
             {
+                // 1. Connection Established
                 if (networkEvents.lNetworkEvents & FD_CONNECT) {
                     if (networkEvents.iErrorCode[FD_CONNECT_BIT] == 0) {
                         if (CurrentState.load() == ServerType::ROUTINEAUTHSERVER)
-                        {
                             G_Routine->SendResponseForTypePacket(PacketType::FindAccountServerRequest);
-                        }
-
                         else if (CurrentState.load() == ServerType::GAMELOBBYSERVER)
-                        {
-                            OutputDebugStringA("성공 \n");
-                            std::string hash = G_GuiControl->hash;
-                            if (hash.empty())continue;
-
-                            G_AntiCheat->RequestHardwareInfo(PacketType::TryConnectLobbyServerRequest, hash);
-                        
-                        }
-
-                    }
-                    else {
-       
-                        std::string abc = std::to_string(networkEvents.iErrorCode[FD_CONNECT_BIT]);
-                        OutputDebugStringA(abc.c_str());
-
+                            G_AntiCheat->RequestHardwareInfo(PacketType::TryConnectLobbyServerRequest, G_GuiControl->hash);
+                    } else {
                         closesocket(currentSocket);
                         currentSocket = INVALID_SOCKET;
                     }
                 }
+                // 2. Incoming Data Available
                 if (networkEvents.lNetworkEvents & FD_READ) {
                     HandleReceive();
                 }
-                if (networkEvents.lNetworkEvents & FD_CLOSE)
-                {
-                    if (currentSocket)
-                    {
+                // 3. Connection Terminated
+                if (networkEvents.lNetworkEvents & FD_CLOSE) {
+                    if (currentSocket != INVALID_SOCKET) {
                         closesocket(currentSocket);
                         currentSocket = INVALID_SOCKET;
                         WSAEventSelect(currentSocket, networkEvent, 0);
                         WSAResetEvent(networkEvent);
-                        if (CurrentState.load() == ServerType::GAMELOBBYSERVER)
-                        {
-                            ConnectToRoutinAuthServer();
-                        }
+                        // Fallback logic for lobby disconnection
+                        if (CurrentState.load() == ServerType::GAMELOBBYSERVER) ConnectToRoutinAuthServer();
                     }
                 }
-             
             }
         }
     }
 }
 
-// 서버 상태 처리
-void NetWork::HandleCurrentState()
-{
-    switch (CurrentState)
-    {
-    case::ServerType::WAIT:
-    {
-        CurrentState.store(ServerType::ROUTINEAUTHSERVER);
-        break;
-    }
-    case::ServerType::ROUTINEAUTHSERVER:
-    {
-        CurrentState.store(ServerType::ROUTINEAUTHSERVER);
-        break;
-    }
-    case::ServerType::GAMELOBBYSERVER:
-    {
-        break;
-    }
-
-    default:break;
-    }
-}
-
-// 수신 데이터 처리 (패킷 처리 큐에 추가)
+/** @brief Ingress: Reads raw bytes from the socket and pushes them to the processing queue. */
 void NetWork::HandleReceive()
 {
-    std::vector<uint8_t> data;
-    data.resize(BUFFER_SIZE);
-    int Len;
-    do
-    {
-        Len = recv(currentSocket, reinterpret_cast<char*>(data.data()), data.size(), 0);
-        if (Len > 0)
-        {
-            G_Routine->addToProgressQueue(data);
-        }
-        else
-        {
-            break;
-        }
-    } while (Len > 0);
+    std::vector<uint8_t> data(BUFFER_SIZE);
+    int len;
+    do {
+        len = recv(currentSocket, reinterpret_cast<char*>(data.data()), (int)data.size(), 0);
+        if (len > 0) G_Routine->addToProgressQueue(data);
+    } while (len > 0);
 }
 
-// 송신 큐에 패킷 추가
+/** @brief Egress: Enqueues data to the thread-safe send queue. */
 void NetWork::addToSendQueue(const std::vector<uint8_t>& data)
 {
     {
@@ -220,76 +167,50 @@ void NetWork::addToSendQueue(const std::vector<uint8_t>& data)
     wakeSendthread.notify_one();
 }
 
-// 소켓 및 스레드 정리
+/** @brief Gracefully shuts down all networking threads and releases WinSock resources. */
 void NetWork::CleanUp()
 {
-    if (!running.load())return;
+    if (!running.load()) return;
     running.store(false);
-
 
     wakeSendthread.notify_all();
 
-    if (EventThread.joinable()) {
-        EventThread.join();
-    }
+    if (EventThread.joinable()) EventThread.join();
+    if (sendthread.joinable()) sendthread.join();
 
-    if (sendthread.joinable()) {
-        sendthread.join();
-    }
-
-
-    if (currentSocket != INVALID_SOCKET) {
-        closesocket(currentSocket);
-        currentSocket = INVALID_SOCKET;
-    }
-
-
-    if (networkEvent != WSA_INVALID_EVENT) {
-        WSACloseEvent(networkEvent);
-        networkEvent = WSA_INVALID_EVENT;
-    }
-
+    if (currentSocket != INVALID_SOCKET) closesocket(currentSocket);
+    if (networkEvent != WSA_INVALID_EVENT) WSACloseEvent(networkEvent);
 
     WSACleanup();
-
-
-    {
-        std::lock_guard<std::mutex> lock(sendQueue_Mtx);
-        while (!sendQueue.empty()) {
-            sendQueue.pop();
-        }
-    }
 }
 
-// 송신 큐에서 패킷 가져와 전송
+/**
+ * @brief Egress Loop (Worker Thread).
+ * * Consumes the send queue and transmits data to the active socket.
+ */
 void NetWork::SendLoop()
 {
-    std::vector<uint8_t> data;
     while (running.load())
     {
+        std::vector<uint8_t> data;
         {
             std::unique_lock<std::mutex> lock(sendQueue_Mtx);
-            wakeSendthread.wait(lock, [this] {return !sendQueue.empty() || !running.load(); });
-            if (!running.load()) {
-                break;
-            }
+            wakeSendthread.wait(lock, [this] { return !sendQueue.empty() || !running.load(); });
+            if (!running.load()) break;
+            
             data = std::move(sendQueue.front());
             sendQueue.pop();
         }
         if (!data.empty() && currentSocket != INVALID_SOCKET)
         {
-            int result = send(currentSocket, reinterpret_cast<char*>(data.data()),
-                static_cast<int>(data.size()), 0);
-            data.clear();
+            send(currentSocket, reinterpret_cast<char*>(data.data()), (int)data.size(), 0);
         }
     }
 }
 
-// 우선순위 패킷 즉시 전송
+/** @brief Immediate Transmission: Bypasses the queue for critical priority packets. */
 void NetWork::priorityPacket(PacketType type, const std::string& str1)
 {
     std::vector<uint8_t> data = G_Routine->SendResponseForpriorityPacket(type, str1);
-    send(currentSocket, reinterpret_cast<char*>(data.data()),
-        static_cast<int>(data.size()), 0);
-
+    send(currentSocket, reinterpret_cast<char*>(data.data()), (int)data.size(), 0);
 }
