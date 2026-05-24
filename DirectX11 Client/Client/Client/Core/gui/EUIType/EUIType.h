@@ -1,13 +1,23 @@
-// UI 타입 정의 (화면 전환용)
-#pragma once
-#include<cstdint>
+/**
+ * @file EUIType.h
+ * @brief Defines the global UI states for application flow management.
+ */
 
+#pragma once
+#include <cstdint>
+
+/**
+ * @enum EUIType
+ * @brief Categorizes the distinct screens/states of the client application.
+ * * This enumeration is used by the UI Manager to drive state transitions 
+ * and render context-specific interfaces.
+ */
 enum class EUIType : uint8_t
 {
-    Init,       // 초기 화면 (로그인/회원가입 선택)
-    Register,   // 회원가입 화면
-    Login,      // 로그인 화면
-    Lobby,      // 로비 화면 (게임 찾기)
-    Matching,   // 매칭 대기 화면
-    Game        // 게임 진행 화면
+    Init,        // Entry point: Selection between Authentication and Registration
+    Register,    // User account creation interface
+    Login,       // User authentication interface
+    Lobby,       // Game discovery and room selection hub
+    Matching,    // Queue management and matchmaking wait state
+    Game         // Active game session and gameplay interface
 };
