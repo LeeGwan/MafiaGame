@@ -1,3 +1,4 @@
+> English | [한국어](./README.kor.md)
 #Flect Security Module: Kernel-Mode Security Learning Project
 Flect Security Module is a personal learning project where I explored how common user-mode security concepts can be translated into kernel-mode implementations. It consists of a simple kernel driver, an Unreal Engine client interface, and a basic server communication module.
 
