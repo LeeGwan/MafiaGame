@@ -5,17 +5,22 @@
 #include "GameFramework/GameState.h"
 #include "MafiaGameState.generated.h"
 
-// 플레이어 스폰 위치 데이터
+/**
+ * @struct FPlayerStartData
+ * @brief Container for mapping player session tokens to their designated world spawn locations.
+ */
 USTRUCT(BlueprintType)
 struct FPlayerStartData
 {
     GENERATED_BODY()
 
+    /** Unique session hash used for player identification */
     UPROPERTY()
-    FString PlayerHash; // 플레이어 세션 토큰
+    FString PlayerHash;
 
+    /** World coordinates for the assigned spawn point */
     UPROPERTY()
-    FVector Location; // 스폰 위치
+    FVector Location;
 
     FPlayerStartData()
         : PlayerHash(TEXT("")), Location(FVector::ZeroVector)
@@ -28,58 +33,76 @@ struct FPlayerStartData
     }
 };
 
-// 게임 페이즈 (네트워크 복제)
+/**
+ * @enum EGamePhase
+ * @brief Defines the distinct stages of a Mafia game session.
+ * These phases govern player movement, UI state, and available actions.
+ */
 UENUM(BlueprintType)
 enum class EGamePhase : uint8
 {
-    Waiting,    // 대기 중
-    Night,      // 밤 (마피아/경찰/탐정 행동)
-    Morning,    // 아침 (결과 공개)
-    Voting,     // 투표
-    LastWords,  // 유언
-    GameOver    // 게임 종료
+    Waiting,    // Waiting for all players to authenticate and join
+    Night,      // Role-specific action phase (Mafia, Police, Detective)
+    Morning,    // Result reveal and general discussion phase
+    Voting,     // Majority voting phase to identify the suspect
+    LastWords,  // Final speech phase for the accused player
+    GameOver    // Session termination and winner declaration
 };
 
-// 마피아 게임 상태 (모든 클라이언트와 동기화)
+/**
+ * @class AMafiaGameState
+ * @brief Authoritative state manager for the Mafia Game.
+ * Synchronizes global game variables, player counts, and phase timers across all clients.
+ */
 UCLASS()
 class MAFIAGAME_API AMafiaGameState : public AGameState
 {
     GENERATED_BODY()
 
 protected:
+    /** Current active phase of the game session */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    EGamePhase CurrentPhase; // 현재 페이즈
+    EGamePhase CurrentPhase;
 
+    /** Remaining time in the current phase */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    float PhaseTimer; // 페이즈 타이머
+    float PhaseTimer;
 
+    /** Progress of the session in days */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    int32 DayCount; // 현재 날짜
+    int32 DayCount;
 
+    /** Total number of Mafia faction members currently alive */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    int32 MafiaCount; // 마피아 생존자 수
+    int32 MafiaCount;
 
+    /** Total number of Citizen faction members currently alive */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    int32 CitizenTeamCount; // 시민팀 생존자 수
+    int32 CitizenTeamCount;
 
+    /** Sum of all living players across both factions */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    int32 AlivePlayerCount; // 총 생존자 수
+    int32 AlivePlayerCount;
 
+    /** Session ID of the player currently selected for execution */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    FString ExecutedPlayerId; // 처형된 플레이어 ID
+    FString ExecutedPlayerId;
 
+    /** Registry of all validated player session hashes for the current match */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    TArray<FString> PlayerHashes; // 모든 플레이어 세션 토큰
+    TArray<FString> PlayerHashes;
 
+    /** Mapping table of session hashes to physical spawn points */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-    TArray<FPlayerStartData> PlayerStartLocations; // 플레이어별 스폰 위치
+    TArray<FPlayerStartData> PlayerStartLocations;
 
 public:
     AMafiaGameState();
 
+    /** @brief Required override to register variables for network synchronization */
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    // Getters
+    /** Getters */
     UFUNCTION(BlueprintCallable, Category = "Game State")
     EGamePhase GetCurrentPhase() const { return CurrentPhase; }
 
@@ -110,11 +133,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Game State")
     TArray<FPlayerStartData> GetPlayerStartLocations() const { return PlayerStartLocations; }
 
-    // 플레이어 세션 토큰으로 스폰 위치 찾기
+    /**
+     * @brief Retrieves the assigned spawn location based on a player's session hash.
+     */
     UFUNCTION(BlueprintCallable, Category = "Game State")
     FVector GetPlayerStartLocationByHash(const FString& PlayerHash) const;
 
-    // Setters (서버 전용)
+    /** Setters (Strictly enforced Authority/Server-Only) */
     void SetCurrentPhase(EGamePhase NewPhase);
     void SetPhaseTimer(float NewTimer);
     void SetDayCount(int32 NewDay);
@@ -127,19 +152,19 @@ public:
     void SetAtPlayerHash(int index, const FString& Hashes);
     void AddPlayerStartLocation(const FString& PlayerHash, FVector Location);
 
-    // 페이즈 변경 알림 (멀티캐스트)
+    /** [NetMulticast RPC] Notifies clients of a phase transition and synchronized duration. */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastPhaseChanged(EGamePhase NewPhase, float Duration);
 
-    // 게임 종료 알림 (멀티캐스트)
+    /** [NetMulticast RPC] Signals game conclusion and synchronization of the winning result. */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastGameOver(bool bMafiaWin);
 
-    // 플레이어 사망 알림 (멀티캐스트)
+    /** [NetMulticast RPC] Broadcasts a specific player elimination event to all participants. */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastNotifyPlayerDeath(const FString& PlayerId, const FString& PlayerName);
 
-    // 유언 알림 (멀티캐스트)
+    /** [NetMulticast RPC] Synchronizes and displays the condemned player's final message. */
     UFUNCTION(NetMulticast, Reliable)
     void MulticastNotifyLastWords(const FString& PlayerId, const FString& Words);
 };
