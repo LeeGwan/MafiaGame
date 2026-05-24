@@ -1,99 +1,98 @@
-// 프로세스 예외 처리 구현부
+/**
+ * @file ProcessHandler.cpp
+ * @brief Implementation of global exception filtering and user feedback orchestration.
+ */
+
 #include "ProcessHandler.h"
 #include <fstream>
 #include "../EventManager/EventManager.h"
-#include"../EventType/EventType.h"
+#include "../EventType/EventType.h"
 #include "../../Network/Packet/PacketStructure/PacketStructure.h"
 
-// 전역 싱글톤 인스턴스 생성
+/** Global Singleton Instance for Process Lifecycle and Safety Management */
 std::unique_ptr<ProcessHandler> G_ProcessHandler = std::make_unique<ProcessHandler>();
 
-// 생성자: 전역 예외 핸들러 등록
+/**
+ * @brief Constructor: Registers the top-level exception filter.
+ * * This ensures that any unhandled exception in the process is captured
+ * by the custom filter before the application crashes.
+ */
 ProcessHandler::ProcessHandler()
 {
-	// SetUnhandledExceptionFilter로 커스텀 예외 핸들러 등록
-	// 처리되지 않은 예외 발생 시 MyUnhandledExceptionFilter 자동 호출
-	SetUnhandledExceptionFilter(ProcessHandler::MyUnhandledExceptionFilter);
+    // Register custom top-level exception handler
+    SetUnhandledExceptionFilter(ProcessHandler::MyUnhandledExceptionFilter);
 }
 
 ProcessHandler::~ProcessHandler() = default;
 
-// 전역 예외 핸들러 콜백 함수
+/**
+ * @brief Global Unhandled Exception Filter.
+ * @param ExceptionInfo Pointers to exception records and context.
+ * @return EXCEPTION_EXECUTE_HANDLER to terminate the faulting block gracefully.
+ */
 LONG __stdcall ProcessHandler::MyUnhandledExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
-	// 예외 발생 시 이벤트 트리거 (현재 주석 처리)
-	//G_core->get_C_eventmanager()->trigger(EventType::Exception_Error, true);
+    /**
+     * @todo Implement crash dump generation (Minidump) or error reporting.
+     * G_core->get_C_eventmanager()->trigger(EventType::Exception_Error, true);
+     */
+    
+    MessageBoxA(NULL, 
+        "A critical process error has occurred. The application will now terminate.", 
+        "System Exception", 
+        MB_ICONERROR);
 
-	// 사용자에게 예외 발생 알림 (테스트용)
-	MessageBoxA(NULL, "error", "", 0);
-
-	// 예외 처리 완료 반환
-	return EXCEPTION_EXECUTE_HANDLER;
+    return EXCEPTION_EXECUTE_HANDLER;
 }
 
-// 서버 응답 결과를 MessageBox로 표시
+/**
+ * @brief Displays server response results using a standard Win32 MessageBox.
+ * @param result The ResultType received from the server.
+ * * Automatically determines the appropriate icon and title based on success/failure.
+ */
 void ProcessHandler::MsgHandler(ResultType result)
 {
-	// 성공 여부 판단 (회원가입, 로그인, 세션 검증 성공)
-	bool successed = (result == ResultType::SignUp_Succeeded ||
-		result == ResultType::Login_Succeeded ||
-		result == ResultType::CheckSession_Succeeded);
+    // Evaluate success criteria for UI feedback logic
+    bool succeeded = (result == ResultType::SignUp_Succeeded ||
+                      result == ResultType::Login_Succeeded ||
+                      result == ResultType::CheckSession_Succeeded);
 
-	// ResultType을 문자열로 변환
-	std::string msg = ConversationResult(result);
-
-	// MessageBox 표시 (성공: 정보 아이콘, 실패: 경고 아이콘)
-	MessageBoxA(NULL, msg.c_str(), successed ? "SUCESSED" : "FAILED",
-		MB_OK | successed ? MB_ICONINFORMATION : MB_ICONWARNING);
+    std::string msg = ConversationResult(result);
+    
+    // UI Notification with contextual icons (Information for success, Warning for failure)
+    MessageBoxA(NULL, 
+        msg.c_str(), 
+        succeeded ? "SUCCESS" : "FAILED",
+        MB_OK | (succeeded ? MB_ICONINFORMATION : MB_ICONWARNING));
 }
 
-// ResultType을 문자열로 변환
+/**
+ * @brief Maps internal ResultType enumerations to human-readable string descriptors.
+ * @param result The enumeration value to translate.
+ * @return A descriptive string representation of the operation result.
+ */
 std::string ProcessHandler::ConversationResult(ResultType result)
 {
-	std::string resultstring;
-	switch (result)
-	{
-		// 회원가입 결과
-	case ResultType::SignUp_Failed:
-		resultstring = "SignUp_Failed";
-		break;
-	case ResultType::SignUp_AlreadyExists:
-		resultstring = "SignUp_AlreadyExists";  // 이미 존재하는 계정
-		break;
-	case ResultType::SignUp_Succeeded:
-		resultstring = "SignUp_Succeeded";
-		break;
-
-		// 로그인 결과
-	case ResultType::Login_Failed:
-		resultstring = "Login_Failed";
-		break;
-	case ResultType::Login_InvalidCredentials:
-		resultstring = "Login_InvalidCredentials";  // 잘못된 인증 정보
-		break;
-	case ResultType::Login_AlreadyLoggedIn:
-		resultstring = "Login_AlreadyLoggedIn";  // 중복 로그인
-		break;
-	case ResultType::Login_Succeeded:
-		resultstring = "Login_Succeeded";
-		break;
-
-		// 세션 검증 결과
-	case ResultType::CheckSession_Succeeded:
-		resultstring = "Successed To Join GameLobby.";
-		break;
-	case ResultType::CheckSession_Failed:
-		resultstring = "Failed To Join GameLobby.";
-		break;
-
-	default:
-		break;
-	}
-	return resultstring;
+    switch (result)
+    {
+    case ResultType::SignUp_Failed:           return "Account registration failed.";
+    case ResultType::SignUp_AlreadyExists:    return "Account already exists.";
+    case ResultType::SignUp_Succeeded:         return "Registration successful.";
+    case ResultType::Login_Failed:            return "Authentication failed.";
+    case ResultType::Login_InvalidCredentials: return "Invalid username or password.";
+    case ResultType::Login_AlreadyLoggedIn:    return "This account is already logged in.";
+    case ResultType::Login_Succeeded:         return "Authentication successful.";
+    case ResultType::CheckSession_Succeeded:   return "Session validated. Joining lobby...";
+    case ResultType::CheckSession_Failed:      return "Session expired or invalid.";
+    default:                                   return "An unknown error has occurred.";
+    }
 }
 
-// SEH 예외 코드 생성
+/**
+ * @brief Provides a standard SEH filter return value.
+ * @return EXCEPTION_EXECUTE_HANDLER
+ */
 DWORD ProcessHandler::generate_exception()
 {
-	return EXCEPTION_EXECUTE_HANDLER;
+    return EXCEPTION_EXECUTE_HANDLER;
 }
