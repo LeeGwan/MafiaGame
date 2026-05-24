@@ -1,28 +1,37 @@
-// 윈도우 제어 GUI 구현
+/**
+ * @file ControlGui.cpp
+ * @brief Implementation of the Window Control and Navigation GUI.
+ */
+
 #include "ControlGui.h"
 #include "../guicontrol/GuiControl.h"
 #include "../EUIType/EUIType.h"
 
+/**
+ * @brief Renders window management buttons and navigation controls.
+ * Handles Minimize, Close (WM_CLOSE), and UI state transitions.
+ */
 void ControlGui::Render()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-    // 오른쪽 상단에 제어 버튼 배치
+    // --- Window Control Buttons (Top-Right) ---
     ImVec2 controlButtonPos = ImVec2(io.DisplaySize.x - 80, 10);
     ImGui::SetNextWindowPos(controlButtonPos);
     ImGui::SetNextWindowSize(ImVec2(70, 35));
 
+    // Create a transparent overlay for management buttons
     ImGui::Begin("##ControlButtons", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse);
 
-    // 버튼 색상 설정
+    // Apply custom styling for control buttons
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 0.9f));
 
-    // 최소화 버튼
+    // Minimize Button Handler
     if (ImGui::Button("_", ImVec2(25, 25))) {
         if (parentGui->m_mainWindow) {
             ShowWindow(parentGui->m_mainWindow, SW_MINIMIZE);
@@ -31,12 +40,12 @@ void ControlGui::Render()
 
     ImGui::SameLine();
 
-    // 닫기 버튼
+    // Close Button Handler: Triggers logout sequence and sends WM_CLOSE message
     if (ImGui::Button("X", ImVec2(25, 25))) {
         if (parentGui->m_mainWindow) {
-            // 로그인 상태면 로그아웃 처리 (현재 주석 처리)
+            // Trigger logout event if currently authenticated
             if (parentGui->IsLogin()) {
-                //   G_core->get_C_eventmanager()->trigger(EventType::LOGOUT_EVENT, false, parentGui->GetUserHash());
+                // G_core->get_C_eventmanager()->trigger(EventType::LOGOUT_EVENT, false, parentGui->GetUserHash());
             }
             PostMessage(parentGui->m_mainWindow, WM_CLOSE, 0, 0);
         }
@@ -45,7 +54,8 @@ void ControlGui::Render()
     ImGui::PopStyleColor(2);
     ImGui::End();
 
-    // 뒤로가기 버튼 (Init, Lobby 화면 제외)
+    // --- Navigation Controls (Bottom-Left) ---
+    // The 'Back' button is disabled on Init and Lobby screens to prevent invalid state transitions.
     if (parentGui->currentUitype.load() != EUIType::Init &&
         parentGui->currentUitype.load() != EUIType::Lobby) {
 
@@ -59,7 +69,8 @@ void ControlGui::Render()
             ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
             ImGuiWindowFlags_NoScrollWithMouse);
 
-        if (ImGui::Button(u8"뒤로가기", ImVec2(80, 30))) {
+        // Return to the Initial screen
+        if (ImGui::Button("Back", ImVec2(80, 30))) {
             parentGui->SetUitype(EUIType::Init);
         }
 
