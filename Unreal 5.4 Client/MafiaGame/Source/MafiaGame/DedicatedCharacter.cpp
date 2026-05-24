@@ -1,5 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// 마피아 게임 플레이어 캐릭터 구현
+// Implementation of the Mafia Game Player Character
 
 #include "DedicatedCharacter.h"
 #include "UObject/ConstructorHelpers.h"
@@ -27,13 +27,16 @@
 #include "DedicatedGameMode.h"
 #include "MafiaGameState.h"
 #include "MafiaPlayerState.h"
-#include "GameFramework/PlayerController.h"
 
-// 캐릭터 초기화 (컴포넌트 설정, 네트워크 복제 설정)
+/**
+ * @brief Constructor: Sets up default components, movement properties, and network replication.
+ */
 ADedicatedCharacter::ADedicatedCharacter()
 {
     PrimaryActorTick.bStartWithTickEnabled = true;
     PrimaryActorTick.bCanEverTick = true;
+
+    // Initialize default properties
     PlayerId = TEXT("");
     PlayerName = TEXT("123");
     bIsMovingToTarget = false;
@@ -44,10 +47,11 @@ ADedicatedCharacter::ADedicatedCharacter()
     bIsTouch = false;
     CachedNameplateWidget = nullptr;
     NameplateWidget = nullptr;
-    // Capsule이 Root (Character 기본 구조)
+
+    // Set size for collision capsule
     GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
-    // SkeletalMesh들도 Capsule 아래에 붙임
+    // Setup modular skeletal meshes attached to the main mesh
     SkeletalMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMeshComp"));
     SkeletalMeshComponent->SetupAttachment(GetMesh());
 
@@ -60,24 +64,30 @@ ADedicatedCharacter::ADedicatedCharacter()
     SkeletalMeshComponent3 = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMeshComp3"));
     SkeletalMeshComponent3->SetupAttachment(GetMesh());
 
+    // Character rotation settings for top-down view
     bUseControllerRotationPitch = false;
     bUseControllerRotationYaw = false;
     bUseControllerRotationRoll = false;
 
+    // Configure character movement settings
     if (GetCharacterMovement())
     {
         GetCharacterMovement()->MaxWalkSpeed = MovementSpeed;
         GetCharacterMovement()->bOrientRotationToMovement = true;
         GetCharacterMovement()->RotationRate = FRotator(0.0f, 640.0f, 0.0f);
         GetCharacterMovement()->bUseControllerDesiredRotation = false;
+        
+        // Smooth network movement
         GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
         GetCharacterMovement()->NetworkMaxSmoothUpdateDistance = 92.f;
         GetCharacterMovement()->NetworkNoSmoothUpdateDistance = 140.f;
     }
 
+    // Enable Network Replication
     bReplicates = true;
     SetReplicateMovement(true);
 
+    // Camera Boom for top-down perspective
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
     CameraBoom->SetUsingAbsoluteRotation(true);
@@ -85,11 +95,12 @@ ADedicatedCharacter::ADedicatedCharacter()
     CameraBoom->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f));
     CameraBoom->bDoCollisionTest = false;
 
+    // Top-down camera component
     TopDownCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
     TopDownCameraComponent->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     TopDownCameraComponent->bUsePawnControlRotation = false;
 
-    // NameplateWidget 생성
+    // Nameplate UI component attached to the character's head
     NameplateWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("NameplateWidget"));
     NameplateWidget->SetupAttachment(GetMesh());
     NameplateWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
@@ -97,7 +108,9 @@ ADedicatedCharacter::ADedicatedCharacter()
     NameplateWidget->SetDrawSize(FVector2D(200.0f, 50.0f));
 }
 
-// 네트워크 복제 속성 등록 (PlayerId, PlayerName, 이동 정보)
+/**
+ * @brief Registers properties for network replication across server and clients.
+ */
 void ADedicatedCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -107,7 +120,9 @@ void ADedicatedCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
     DOREPLIFETIME(ADedicatedCharacter, bIsMovingToTarget);
 }
 
-// 매 프레임 호출 (타겟 위치로 이동 처리)
+/**
+ * @brief Frame-by-frame update: Handles movement interpolation towards the target location.
+ */
 void ADedicatedCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -120,6 +135,7 @@ void ADedicatedCharacter::Tick(float DeltaSeconds)
 
         if (Distance > 50.0f)
         {
+            // Rotate towards destination and apply movement
             FRotator TargetRotation = UKismetMathLibrary::FindLookAtRotation(CurrentLocation, TargetLocation);
             SetActorRotation(FRotator(0.0f, TargetRotation.Yaw, 0.0f));
             AddMovementInput(Direction, 1.0f);
@@ -131,13 +147,14 @@ void ADedicatedCharacter::Tick(float DeltaSeconds)
     }
 }
 
-// 게임 시작 시 초기화 (메시 설정, 입력 설정, 이름표 위젯 로드)
+/**
+ * @brief Game start initialization: Mesh syncing, Input mode configuration, and UI Loading.
+ */
 void ADedicatedCharacter::BeginPlay()
 {
     Super::BeginPlay();
 
-    UE_LOG(LogTemp, Warning, TEXT("[Character] BeginPlay Start - %s"), *GetName());
-
+    // Sync skeletal mesh poses for modular cosmetics
     if (GetMesh())
     {
         SkeletalMeshComponent->SetLeaderPoseComponent(GetMesh());
@@ -147,9 +164,9 @@ void ADedicatedCharacter::BeginPlay()
     }
 
     APlayerController* PC = Cast<APlayerController>(GetController());
-
     if (PC)
     {
+        // UI Interaction settings
         PC->bShowMouseCursor = true;
         PC->bEnableClickEvents = true;
         PC->bEnableMouseOverEvents = true;
@@ -158,11 +175,10 @@ void ADedicatedCharacter::BeginPlay()
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         PC->SetInputMode(InputMode);
 
+        // Update character visibility through PlayerState
         if (AMafiaPlayerState* MyPS = Cast<AMafiaPlayerState>(PC->PlayerState))
         {
-
             TWeakObjectPtr<AMafiaPlayerState> WeakPS(MyPS);
-
             FTimerHandle VisibilityTimer;
             GetWorld()->GetTimerManager().SetTimer(VisibilityTimer, [WeakPS]()
                 {
@@ -174,12 +190,9 @@ void ADedicatedCharacter::BeginPlay()
         }
     }
 
-
-    if (NameplateWidget && NameplateWidget->GetWidget())
+    // Async Loading for Player Nameplate UI to optimize performance
+    if (NameplateWidget)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Character] Loading Widget Async..."));
-
-        // 비동기 로딩 방식으로 변경
         FSoftClassPath WidgetClassPath(TEXT("/Game/TopDown/Blueprints/WBP_PlayerNameplate.WBP_PlayerNameplate_C"));
         UClass* WidgetClass = WidgetClassPath.TryLoadClass<UUserWidget>();
 
@@ -188,35 +201,16 @@ void ADedicatedCharacter::BeginPlay()
             NameplateWidget->SetWidgetClass(WidgetClass);
             NameplateWidget->InitWidget();
             UpdateNameplateWidgetForName();
-            UE_LOG(LogTemp, Warning, TEXT("[Character] Widget Loaded Successfully"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("[Character] Failed to load widget class!"));
         }
     }
-    if (!NameplateWidget)
-    {
-        UE_LOG(LogTemp, Error, TEXT("NameplateWidget!!"));
-    }
-    if (!NameplateWidget->GetWidget())
-    {
-        UE_LOG(LogTemp, Error, TEXT("NameplateWidget   GetWidget!!"));
-    }
-    UE_LOG(LogTemp, Warning, TEXT("[Character] BeginPlay End - %s"), *GetName());
 }
 
-// 이름표 위젯에 플레이어 이름 업데이트
+/**
+ * @brief Updates the player's name text in the screen-space widget.
+ */
 void ADedicatedCharacter::UpdateNameplateWidgetForName()
 {
-    APlayerController* PC = Cast<APlayerController>(GetController());
-
-
-    if (!NameplateWidget || !NameplateWidget->GetWidget())
-    {
-
-        return;
-    }
+    if (!NameplateWidget || !NameplateWidget->GetWidget()) return;
 
     CachedNameplateWidget = Cast<UUserWidget>(NameplateWidget->GetWidget());
     if (CachedNameplateWidget)
@@ -225,20 +219,15 @@ void ADedicatedCharacter::UpdateNameplateWidgetForName()
         if (NameText)
         {
             NameText->SetText(FText::FromString(PlayerName));
-
-        }
-        else
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("PlayerNameText 못 찾음!"));
         }
     }
 }
 
-// 이름표 위젯에 직업 정보 업데이트 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Updates the job title text in the player's nameplate.
+ */
 void ADedicatedCharacter::UpdateNameplateWidgetForJobs_Implementation(const FString& Jobs)
 {
-
-
     if (CachedNameplateWidget)
     {
         UTextBlock* NameText = Cast<UTextBlock>(CachedNameplateWidget->GetWidgetFromName(TEXT("PlayerJobText")));
@@ -246,16 +235,12 @@ void ADedicatedCharacter::UpdateNameplateWidgetForJobs_Implementation(const FStr
         {
             NameText->SetText(FText::FromString(Jobs));
         }
-        else
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("PlayerJobText 못 찾음!"));
-        }
     }
-
 }
 
-
-// 입력 컴포넌트 설정 (Enhanced Input 시스템)
+/**
+ * @brief Configures Enhanced Input bindings for character interaction.
+ */
 void ADedicatedCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -276,20 +261,17 @@ void ADedicatedCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
     {
         if (SetDestinationClickAction)
         {
-            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Started,
-                this, &ADedicatedCharacter::OnInputStarted);
-            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Triggered,
-                this, &ADedicatedCharacter::OnSetDestinationTriggered);
-            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Completed,
-                this, &ADedicatedCharacter::OnSetDestinationReleased);
-            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Canceled,
-                this, &ADedicatedCharacter::OnSetDestinationReleased);
+            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Started, this, &ADedicatedCharacter::OnInputStarted);
+            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Triggered, this, &ADedicatedCharacter::OnSetDestinationTriggered);
+            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Completed, this, &ADedicatedCharacter::OnSetDestinationReleased);
+            EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Canceled, this, &ADedicatedCharacter::OnSetDestinationReleased);
         }
     }
 }
 
-
-// 화면에 메시지 출력 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Displays an on-screen debug message for the player.
+ */
 void ADedicatedCharacter::ClientShowMessage_Implementation(int key, float delay, FColor col, const FString& Text)
 {
     if (GEngine)
@@ -298,56 +280,44 @@ void ADedicatedCharacter::ClientShowMessage_Implementation(int key, float delay,
     }
 }
 
-// 입력 시작 이벤트
 void ADedicatedCharacter::OnInputStarted()
 {
-
+    // Implementation for input start event
 }
 
-// 목표 지점 설정 트리거 (마우스/터치로 이동 방향 계산)
+/**
+ * @brief Calculates destination based on cursor/touch location and applies movement.
+ */
 void ADedicatedCharacter::OnSetDestinationTriggered()
 {
-
     FollowTime += GetWorld()->GetDeltaSeconds();
 
     APlayerController* PC = Cast<APlayerController>(GetController());
     if (!PC) return;
 
     FHitResult Hit;
-    bool bHitSuccessful = false;
-
-    if (bIsTouch)
-    {
-        bHitSuccessful = PC->GetHitResultUnderFinger(ETouchIndex::Touch1,
-            ECollisionChannel::ECC_Visibility, true, Hit);
-    }
-    else
-    {
-        bHitSuccessful = PC->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, true, Hit);
-    }
+    bool bHitSuccessful = bIsTouch ? 
+        PC->GetHitResultUnderFinger(ETouchIndex::Touch1, ECC_Visibility, true, Hit) : 
+        PC->GetHitResultUnderCursor(ECC_Visibility, true, Hit);
 
     if (bHitSuccessful)
     {
         CachedDestination = Hit.Location;
-
     }
-
 
     FVector WorldDirection = (CachedDestination - GetActorLocation()).GetSafeNormal();
     AddMovementInput(WorldDirection, 1.0, false);
 }
 
-// 마우스/터치 릴리즈 (짧은 클릭: 플레이어 선택 또는 이동, 긴 클릭: 이동만)
+/**
+ * @brief Logic for input release: Differentiates between interaction (Short Press) and movement (Long Press).
+ */
 void ADedicatedCharacter::OnSetDestinationReleased()
 {
-
-
     AMafiaGameState* GameState = Cast<AMafiaGameState>(GetWorld()->GetGameState());
 
     if (FollowTime <= ShortPressThreshold)
     {
-
-
         APlayerController* PC = Cast<APlayerController>(GetController());
         if (!PC) return;
 
@@ -355,196 +325,155 @@ void ADedicatedCharacter::OnSetDestinationReleased()
 
         if (GameState && MyPS && MyPS->GetIsAlive())
         {
-
-
             AActor* ClickedActor = nullptr;
-
             if (GetClickedActor(ClickedActor))
             {
-
-
                 ADedicatedCharacter* ClickedCharacter = Cast<ADedicatedCharacter>(ClickedActor);
-
                 if (ClickedCharacter)
                 {
                     FString ClickedPlayerId = ClickedCharacter->GetPlayerId();
+                    if (ClickedPlayerId.IsEmpty()) return;
 
-                    if (ClickedPlayerId.IsEmpty())
-                    {
-
-                        return;
-                    }
-
-                    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green,
-                        FString::Printf(TEXT("[Input] 클릭한 플레이어: %s"), *ClickedPlayerId));
-
+                    // Execute Phase-specific actions (Vote or Night Ability)
                     if (GameState->GetCurrentPhase() == EGamePhase::Night)
                     {
-
-                        FString MyPlayerId = MyPS->GetPlayerHash();
-                        if (MyPlayerId != ClickedPlayerId)
+                        if (MyPS->GetPlayerHash() != ClickedPlayerId)
                         {
                             ServerRequestNightAction(ClickedPlayerId);
                         }
                     }
                     else if (GameState->GetCurrentPhase() == EGamePhase::Voting)
                     {
-
                         ServerRequestVote(ClickedPlayerId);
                     }
                     return;
                 }
             }
 
-
-            UAIBlueprintHelperLibrary::SimpleMoveToLocation(PC, CachedDestination);
-            UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, FXCursor, CachedDestination,
-                FRotator::ZeroRotator, FVector(1.f, 1.f, 1.f), true, true, ENCPoolMethod::None, true);
-        }
-        else
-        {
-
-
+            // Fallback: Just move to location if no actor was clicked
             UAIBlueprintHelperLibrary::SimpleMoveToLocation(PC, CachedDestination);
             UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, FXCursor, CachedDestination,
                 FRotator::ZeroRotator, FVector(1.f, 1.f, 1.f), true, true, ENCPoolMethod::None, true);
         }
     }
-
-
     FollowTime = 0.f;
 }
 
-// 터치 입력 시작
 void ADedicatedCharacter::OnTouchTriggered()
 {
     bIsTouch = true;
     OnSetDestinationTriggered();
 }
 
-// 터치 입력 종료
 void ADedicatedCharacter::OnTouchReleased()
 {
     bIsTouch = false;
     OnSetDestinationReleased();
 }
 
-// 커서 위치의 액터 가져오기 (플레이어 선택용)
+/**
+ * @brief Traces for an actor under the cursor for selection logic.
+ */
 bool ADedicatedCharacter::GetClickedActor(AActor*& OutActor)
 {
     APlayerController* PC = Cast<APlayerController>(GetController());
-    if (!PC)
-    {
-
-        return false;
-    }
+    if (!PC) return false;
 
     FHitResult HitResult;
     bool bHit = PC->GetHitResultUnderCursor(ECC_Pawn, false, HitResult);
 
-
-
     if (bHit && HitResult.GetActor())
     {
         OutActor = HitResult.GetActor();
-
         return true;
     }
-
     return false;
 }
 
-// 플레이어 이름 복제 콜백
+/**
+ * @brief Callback for Replicated PlayerName: Updates UI on clients when name changes.
+ */
 void ADedicatedCharacter::OnRep_PlayerName()
 {
     UpdateNameplateWidgetForName();
 }
 
-// 플레이어 이름 설정 (서버 전용)
+/**
+ * @brief Sets player name (Server Only).
+ */
 void ADedicatedCharacter::SetPlayerName(const FString& Name)
 {
     if (HasAuthority())
     {
         PlayerName = Name;
         UpdateNameplateWidgetForName();
-
     }
 }
 
-// 목표 위치로 이동 시작
+/**
+ * @brief Triggers internal movement logic to a target location.
+ */
 void ADedicatedCharacter::MoveToLocation(FVector Location)
 {
     TargetLocation = Location;
     bIsMovingToTarget = true;
 }
 
-
-// 투표 요청 (서버 RPC)
+/**
+ * @brief [Server RPC] Casts a vote against a specific target player.
+ */
 void ADedicatedCharacter::ServerRequestVote_Implementation(const FString& TargetId)
 {
     APlayerController* PC = Cast<APlayerController>(GetController());
     if (!PC) return;
 
     AMafiaPlayerState* MyPS = Cast<AMafiaPlayerState>(PC->PlayerState);
-    if (!MyPS) return;
-
     ADedicatedGameMode* GameMode = Cast<ADedicatedGameMode>(GetWorld()->GetAuthGameMode());
-    if (GameMode)
+
+    if (GameMode && MyPS)
     {
-        FString VoterId = MyPS->GetPlayerHash();
-        GameMode->ServerCastVote(VoterId, TargetId);
+        GameMode->ServerCastVote(MyPS->GetPlayerHash(), TargetId);
     }
 }
 
-// 밤 행동 요청 (서버 RPC: 마피아/경찰/탐정)
+/**
+ * @brief [Server RPC] Executes specific night actions (Kill, Investigate, Protect, etc.).
+ */
 void ADedicatedCharacter::ServerRequestNightAction_Implementation(const FString& TargetId)
 {
     APlayerController* PC = Cast<APlayerController>(GetController());
     if (!PC) return;
 
     AMafiaPlayerState* MyPS = Cast<AMafiaPlayerState>(PC->PlayerState);
-    if (!MyPS) return;
+    if (!MyPS || !MyPS->GetIsAlive() || !MyPS->CanNightAction()) return;
 
-    if (!MyPS->GetIsAlive())
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red,
-            TEXT("당신은 사망 하였습니다"));
-    }
-    if (!MyPS->CanNightAction())
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red,
-            TEXT("당신은 특수 직업이 아닙니다"));
-    }
     ADedicatedGameMode* GameMode = Cast<ADedicatedGameMode>(GetWorld()->GetAuthGameMode());
     if (GameMode)
     {
-        FString MyPlayerId = MyPS->GetPlayerHash();
-        if (MyPlayerId != TargetId)
-        {
-            GameMode->ServerProcessNightAction(MyPlayerId, TargetId);
-        }
+        GameMode->ServerProcessNightAction(MyPS->GetPlayerHash(), TargetId);
     }
 }
 
-// 채팅 메시지 전송
+/**
+ * @brief Forwards a chat message to the server for distribution.
+ */
 void ADedicatedCharacter::SendChatMessage(const FString& Message)
 {
     if (Message.IsEmpty()) return;
 
     APlayerController* PC = Cast<APlayerController>(GetController());
-    if (!PC) return;
-
     AMafiaPlayerState* MyPS = Cast<AMafiaPlayerState>(PC->PlayerState);
-    if (!MyPS) return;
-
     ADedicatedGameMode* GameMode = Cast<ADedicatedGameMode>(GetWorld()->GetAuthGameMode());
-    if (GameMode)
+
+    if (GameMode && MyPS)
     {
         GameMode->ServerSendChatMessage(MyPS->GetPlayerHash(), Message);
     }
 }
 
-// 강제 이동 (멀티캐스트 RPC)
+/**
+ * @brief [Multicast RPC] Forcefully teleports the character to a location.
+ */
 void ADedicatedCharacter::ForceMoveToLocation_Implementation(FVector Location)
 {
     SetActorLocation(Location);
@@ -552,7 +481,9 @@ void ADedicatedCharacter::ForceMoveToLocation_Implementation(FVector Location)
     bIsMovingToTarget = false;
 }
 
-// 서버에서 위치 이동 (서버 RPC)
+/**
+ * @brief [Server RPC] Syncs character location to the server.
+ */
 void ADedicatedCharacter::ServerMoveToLocation_Implementation(FVector Location)
 {
     SetActorLocation(Location);
