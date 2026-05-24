@@ -1,39 +1,61 @@
-// 이벤트 관리자 구현부
+/**
+ * @file EventManager.cpp
+ * @brief Implementation of the centralized event dispatching system with SEH protection.
+ */
+
 #include "EventManager.h"
-#include"../ProcessHandler/ProcessHandler.h"
+#include "../ProcessHandler/ProcessHandler.h"
 #include "../EventType/EventType.h"
 
-// SEH를 적용한 안전한 이벤트 실행
+/**
+ * @brief Executes an event callback within a Structured Exception Handling (SEH) block.
+ * @param type The category of the event being triggered.
+ * @param fn The functional wrapper containing the callback logic.
+ * * This method ensures that even if a specific event handler encounters a 
+ * critical failure (e.g., access violation), the main application remains stable.
+ */
 void EventManager::trigger_seh(EventType type, const std::function<void()>& fn)
 {
-	__try {
-		// 람다 함수 실행 (실제 콜백 함수 호출)
-		fn();
-	}
-	__except (G_ProcessHandler->generate_exception())
-	{
-		// 예외 발생 시 여기로 진입
-		// 프로그램 크래시 방지
-	}
+    // Windows-specific SEH to catch hardware/software exceptions at the thread level
+    __try {
+        /** Actual execution of the registered lambda/callback */
+        fn();
+    }
+    /** Exception filter: Delegates crash analysis to the ProcessHandler */
+    __except (G_ProcessHandler->generate_exception())
+    {
+        // Entry point for error logging and system recovery logic
+        // Prevents the client from terminating unexpectedly
+    }
 }
 
-// 생성자: callbacks 맵 메모리 예약
+/**
+ * @brief Constructor: Pre-allocates memory for the callback map.
+ * * Uses the EVENTSIZE sentinel from EventType to prevent mid-runtime 
+ * dynamic memory reallocations, ensuring O(1) access time.
+ */
 EventManager::EventManager()
 {
-	// EVENTSIZE(0x40) 크기만큼 미리 메모리 예약 (동적 재할당 방지)
-	callbacks.reserve(static_cast<size_t>(EventType::EVENTSIZE));
+    callbacks.reserve(static_cast<size_t>(EventType::EVENTSIZE));
 }
 
-// 소멸자: callbacks 맵 정리
+/** @brief Destructor: Ensures graceful cleanup of registered callback metadata. */
 EventManager::~EventManager()
 {
-	callbacks.clear();
+    callbacks.clear();
 }
 
-// 이벤트 타입에 콜백 함수 등록
+/**
+ * @brief Registers a new event handler using raw pointer associations.
+ * @param type The EventType to bind to.
+ * @param thisPtr The 'this' pointer of the object instance (context).
+ * @param func The raw function pointer (QWORD) for the callback.
+ * * This low-level registration allows for efficient member function invocation 
+ * across different class instances without high overhead.
+ */
 void EventManager::add_event(EventType type, void* thisPtr, QWORD* func)
 {
-	// callbacks 맵에 {이벤트 타입: 콜백 정보} 저장
-	// 이미 등록된 이벤트 타입이면 덮어쓰기
-	callbacks[type] = { func ,thisPtr };
+    // Maps the event type to its execution metadata
+    // Overwrites existing bindings to allow for dynamic UI/State transitions
+    callbacks[type] = { func, thisPtr };
 }
