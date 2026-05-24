@@ -1,33 +1,46 @@
-// 초기 화면 구현
+/**
+ * @file InitGui.cpp
+ * @brief Implementation of the application entry point UI.
+ */
+
 #include "InitGui.h"
 #include "../guicontrol/GuiControl.h"
 #include "../EUIType/EUIType.h"
 
+/**
+ * @brief Renders the initial landing screen for user path selection.
+ * Handles navigation to either the Login or Registration interfaces.
+ */
 void InitGui::Render()
 {
-    // 초기 화면 패널 생성
+    // --- Panel Initialization ---
+    // Create a fixed, non-collapsible panel for the landing interface
     ImGui::Begin("##InitPanel", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
-    // 버튼 크기 및 간격 설정
+    // --- Layout Constants ---
+    // Define standardized button dimensions and spacing for visual consistency
     ImVec2 buttonSize = ImVec2(290, 130);
     float spacing = 40.0f;
-    float totalWidth = buttonSize.x * 2 + spacing;
+    float totalWidth = (buttonSize.x * 2) + spacing;
 
-    // 버튼 위치 설정 (화면 중앙)
+    // --- Dynamic Positioning ---
+    // Calculate and set the centered horizontal and vertical cursor position
     ImGui::SetCursorPosX((1020 - totalWidth) * 0.5f);
     ImGui::SetCursorPosY(340);
 
-    // 로그인 버튼
-    if (ImGui::Button(u8"로그인", buttonSize)) {
+    // --- User Path Selection ---
+
+    // Login Button: Triggers state transition to the Authentication screen
+    if (ImGui::Button("Login", buttonSize)) {
         parentGui->SetUitype(EUIType::Login);
     }
 
     ImGui::SameLine(0, spacing);
 
-    // 회원가입 버튼
-    if (ImGui::Button(u8"회원가입", buttonSize)) {
+    // Register Button: Triggers state transition to the Account Creation screen
+    if (ImGui::Button("Sign Up", buttonSize)) {
         parentGui->SetUitype(EUIType::Register);
     }
 
