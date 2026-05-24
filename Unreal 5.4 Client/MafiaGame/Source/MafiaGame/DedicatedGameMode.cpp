@@ -1,5 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// 마피아 게임 데디케이티드 서버 게임모드 구현
+// Implementation of the Dedicated Server GameMode for the Mafia Game
 
 #include "DedicatedGameMode.h"
 #include "MafiaGameState.h"
@@ -17,7 +17,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 
-// 태양 회전 동기화 (모든 클라이언트)
+/**
+ * @brief Synchronizes sun rotation across all connected clients.
+ * @param NewRotation The target rotation for the directional light.
+ */
 void ADedicatedGameMode::MulticastUpdateSunRotation_Implementation(FRotator NewRotation)
 {
     if (SunLight && SunLight->GetLightComponent())
@@ -26,28 +29,31 @@ void ADedicatedGameMode::MulticastUpdateSunRotation_Implementation(FRotator NewR
     }
 }
 
-// 낮 시간 설정 (태양 각도 -60도)
+/**
+ * @brief Sets the environment to Daytime (Sun angle at -60 degrees).
+ */
 void ADedicatedGameMode::SetDayTime()
 {
     if (!SunLight) return;
 
     CurrentSunRotation = FRotator(-60.0f, 0.0f, 0.0f);
     MulticastUpdateSunRotation(CurrentSunRotation);
-    //UE_LOG(LogTemp, Warning, TEXT("낮 시간으로 변경"));
-
 }
 
-// 밤 시간 설정 (태양 각도 -130도)
+/**
+ * @brief Sets the environment to Nighttime (Sun angle at -130 degrees).
+ */
 void ADedicatedGameMode::SetNightTime()
 {
     if (!SunLight) return;
 
     CurrentSunRotation = FRotator(-130.0f, 0.0f, 0.0f);
     MulticastUpdateSunRotation(CurrentSunRotation);
-    //UE_LOG(LogTemp, Warning, TEXT("밤 시간으로 변경"));
 }
 
-// 게임모드 초기화 (게임 상태, 플레이어 상태, 서버 커넥터 설정)
+/**
+ * @brief Constructor: Initializes game state classes and external server connector.
+ */
 ADedicatedGameMode::ADedicatedGameMode()
 {
     ConnectedPlayers = 0;
@@ -55,13 +61,17 @@ ADedicatedGameMode::ADedicatedGameMode()
     CurrentSunRotation = FRotator(-60.0f, 0.0f, 0.0f);
     PrimaryActorTick.bCanEverTick = true;
 
+    // Set default classes for the Game Session
     GameStateClass = AMafiaGameState::StaticClass();
     PlayerStateClass = AMafiaPlayerState::StaticClass();
+    
+    // Custom connector for external Lobby/Authentication server
     P_ServerConnector = MakeUnique<ServerConnector>(TEXT("172.30.1.38"), 9050);
-
 }
 
-// 게임 시작 (태양광 찾기, 스폰 위치 초기화, 게임 로비 서버 연결)
+/**
+ * @brief Entry point for the GameMode. Initializes environment and server connection.
+ */
 void ADedicatedGameMode::BeginPlay()
 {
     Super::BeginPlay();
@@ -69,39 +79,30 @@ void ADedicatedGameMode::BeginPlay()
     if (HasAuthority())
     {
         MafiaGameState = Cast<AMafiaGameState>(GameState);
-
         FindPlayerStarts();
 
+        // Identify the Directional Light actor for Time-of-Day synchronization
         TArray<AActor*> AllActors;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
         for (AActor* Actor : AllActors)
         {
-            UDirectionalLightComponent* LightComp = Actor->FindComponentByClass<UDirectionalLightComponent>();
-
-            if (LightComp)
+            if (Actor->FindComponentByClass<UDirectionalLightComponent>() && 
+                Actor->GetName().Contains(TEXT("BP_Directional_Light")))
             {
-                FString ActorName = Actor->GetName();
-
-                if (ActorName.Contains(TEXT("BP_Directional_Light")))
-                {
-                    SunLight = Cast<ADirectionalLight>(Actor);
-
-                    if (SunLight)
-                    {
-
-                        SetDayTime();
-                    }
-                    break;
-                }
+                SunLight = Cast<ADirectionalLight>(Actor);
+                if (SunLight) SetDayTime();
+                break;
             }
         }
 
+        // Establish connection to the backend lobby server
         P_ServerConnector->Start();
-
     }
 }
 
-// 매 프레임 호출
+/**
+ * @brief Frame update: Handles the phase timer decrement logic.
+ */
 void ADedicatedGameMode::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -117,45 +118,39 @@ void ADedicatedGameMode::Tick(float DeltaTime)
     }
 }
 
-// 플레이어 로그인 전처리 (게임 로비 서버에서 인증 정보 검증)
-void ADedicatedGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId,
-    FString& ErrorMessage)
+/**
+ * @brief Validates player credentials (Hash/Nickname) before allowing connection.
+ */
+void ADedicatedGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
     Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+    
     FString Hash = UGameplayStatics::ParseOption(Options, TEXT("Hash"));
     FString NickName = UGameplayStatics::ParseOption(Options, TEXT("NickName"));
-    FString Unique = UniqueId.ToString();
 
-    UE_LOG(LogTemp, Warning, TEXT("PreLogin  -Args:%s,  - Hash: %s, Name: %s, UniqueId: %s"), *Options, *Hash, *NickName, *Unique);
-    if (Hash.IsEmpty())
-    {
+    // Reject connections without a valid session hash
+    if (Hash.IsEmpty()) return;
 
-
-        return; // 접속 거부
-    }
-
+    // Cache player data temporarily for PostLogin initialization
     TempPlayerDataMap.Add(UniqueId.ToString(), TPair<FString, FString>(Hash, NickName));
-
-
 }
 
-// 플레이어 로그인 후처리 (캐릭터 생성, 플레이어 정보 초기화)
+/**
+ * @brief Finalizes player setup and triggers game start if all players are connected.
+ */
 void ADedicatedGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
+    
     if (HasAuthority())
     {
         FString UniqueIdStr = NewPlayer->GetPlayerState<APlayerState>()->GetUniqueId().ToString();
         InitPlayerInformaion(NewPlayer, UniqueIdStr);
 
-        UE_LOG(LogTemp, Warning, TEXT("----플레이어 연결: %d/%d-----"), ConnectedPlayers, REQUIRED_PLAYERS);
+        // Sync environmental state to the newly joined player
+        if (SunLight) MulticastUpdateSunRotation(CurrentSunRotation);
 
-
-        if (SunLight)
-        {
-            MulticastUpdateSunRotation(CurrentSunRotation);
-        }
-
+        // Auto-start game logic when required player count is met
         if (ConnectedPlayers == REQUIRED_PLAYERS && MafiaGameState->GetCurrentPhase() == EGamePhase::Waiting)
         {
             AssignJobs();
@@ -164,103 +159,89 @@ void ADedicatedGameMode::PostLogin(APlayerController* NewPlayer)
     }
 }
 
-// 플레이어 리스폰
+/**
+ * @brief Synchronizes PlayerId to the character pawn upon respawn.
+ */
 void ADedicatedGameMode::RestartPlayer(AController* NewPlayer)
 {
     Super::RestartPlayer(NewPlayer);
 
     if (HasAuthority())
     {
-
         ADedicatedCharacter* MafiaChar = Cast<ADedicatedCharacter>(NewPlayer->GetPawn());
         AMafiaPlayerState* MafiaPS = Cast<AMafiaPlayerState>(NewPlayer->PlayerState);
 
         if (MafiaChar && MafiaPS)
         {
-            FString PlayerHash = MafiaPS->GetPlayerHash();
-            MafiaChar->SetPlayerId(PlayerHash);
-
-
+            MafiaChar->SetPlayerId(MafiaPS->GetPlayerHash());
         }
     }
 }
 
-// 맵에서 플레이어 스폰 포인트 찾기
+/**
+ * @brief Scans the level for APlayerStart actors to initialize spawn queues and execution sites.
+ */
 void ADedicatedGameMode::FindPlayerStarts()
 {
-
     TArray<AActor*> FoundStarts;
-    FVector Temp;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), FoundStarts);
 
-    if (FoundStarts.Num() < 6)
-    {
-
-        return;
-    }
-
+    if (FoundStarts.Num() < 6) return;
 
     for (AActor* StartActor : FoundStarts)
     {
-
+        // Designate a specific PlayerStart as the execution podium
         if (StartActor->GetName().Contains(TEXT("PlayerSpwan1_C_17")))
         {
             ExecutionSiteLocation = StartActor->GetActorLocation();
-
-
         }
         else
         {
-            Temp = StartActor->GetActorLocation();
-            SpawnPosition.Enqueue(Temp);
-
+            SpawnPosition.Enqueue(StartActor->GetActorLocation());
         }
     }
-
 }
-// 플레이어 정보 초기화 (세션 토큰, 닉네임, 스폰 위치)
+
+/**
+ * @brief Maps authenticated session data to the Unreal PlayerState and character pawn.
+ */
 void ADedicatedGameMode::InitPlayerInformaion(APlayerController* NewPlayer, const FString& UniqueIdStr)
 {
     if (!HasAuthority() || !MafiaGameState || UniqueIdStr.IsEmpty()) return;
 
-
     FVector SpwanPOS;
-
     AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(NewPlayer->PlayerState);
     ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(NewPlayer->GetPawn());
 
     if (PS && Char && ConnectedPlayers < REQUIRED_PLAYERS)
     {
-        if (SpawnPosition.IsEmpty())
-        {
-            return;
-        }
+        if (SpawnPosition.IsEmpty()) return;
+
         if (TempPlayerDataMap.Contains(UniqueIdStr))
         {
             TPair<FString, FString> PlayerData = TempPlayerDataMap[UniqueIdStr];
-            FString Hash = PlayerData.Key;
-            FString NickName = PlayerData.Value;
             SpawnPosition.Dequeue(SpwanPOS);
-            MulticastSetMovementEnabled(true);
-            PS->SetPlayerHash(Hash);
-            PS->SetNickName(NickName);
-            Char->SetPlayerId(Hash);
-            Char->SetPlayerName(NickName);
+            
+            // Assign session-level identity to the player state
+            PS->SetPlayerHash(PlayerData.Key);
+            PS->SetNickName(PlayerData.Value);
+            Char->SetPlayerId(PlayerData.Key);
+            Char->SetPlayerName(PlayerData.Value);
             PS->SetSpawnPosition(SpwanPOS);
-            MafiaGameState->SetCurrentPhase(EGamePhase::Waiting);
+            
+            // Move character to assigned spawn point
             Char->ServerMoveToLocation_Implementation(SpwanPOS);
-            MafiaGameState->SetPlayerHash(Hash);
+            MafiaGameState->SetPlayerHash(PlayerData.Key);
+            
             TempPlayerDataMap.Remove(UniqueIdStr);
             ConnectedPlayers++;
         }
     }
-
-
 }
 
-
-
-// 직업 할당 (마피아 2, 경찰 1, 탐정 1, 시민 2)
+/**
+ * @brief Randomly assigns jobs (Mafia, Police, Detective, Citizen) to connected players.
+ */
 void ADedicatedGameMode::AssignJobs()
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -268,38 +249,27 @@ void ADedicatedGameMode::AssignJobs()
     TArray<FString> PlayerHashes = MafiaGameState->GetPlayerHashes();
     if (PlayerHashes.Num() != 6) return;
 
+    // Shuffle indices for fair job distribution
     TArray<int32> Indices = { 0, 1, 2, 3, 4, 5 };
-
     for (int32 i = Indices.Num() - 1; i > 0; --i)
     {
-        int32 j = FMath::RandRange(0, i);
-        Indices.Swap(i, j);
+        Indices.Swap(i, FMath::RandRange(0, i));
     }
 
-    TArray<EJobType> Jobs = {
-        EJobType::Mafia,
-        EJobType::Police,
-        EJobType::Detective,
-        EJobType::Citizen,
-        EJobType::Citizen,
-        EJobType::Citizen
-    };
+    TArray<EJobType> Jobs = { EJobType::Mafia, EJobType::Police, EJobType::Detective, 
+                              EJobType::Citizen, EJobType::Citizen, EJobType::Citizen };
 
     int32 MafiaCount = 0;
     int32 CitizenTeamCount = 0;
 
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        APlayerController* PC = It->Get();
-        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(PC->PlayerState);
-        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-        if (PS)
+        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
+        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(It->Get()->GetPawn());
+        
+        if (PS && Char)
         {
-            FString PlayerHash = PS->GetPlayerHash();
-
-            int32 HashIndex = PlayerHashes.IndexOfByKey(PlayerHash);
-
-
+            int32 HashIndex = PlayerHashes.IndexOfByKey(PS->GetPlayerHash());
             if (HashIndex != INDEX_NONE)
             {
                 EJobType AssignedJob = Jobs[Indices[HashIndex]];
@@ -307,15 +277,8 @@ void ADedicatedGameMode::AssignJobs()
                 Char->UpdateNameplateWidgetForJobs(PS->GetJobName());
                 PS->ClientNotifyJobAssigned(AssignedJob);
 
-                if (AssignedJob == EJobType::Mafia)
-                {
-                    MafiaCount++;
-                }
-                else
-                {
-                    CitizenTeamCount++;
-                }
-
+                if (AssignedJob == EJobType::Mafia) MafiaCount++;
+                else CitizenTeamCount++;
             }
         }
     }
@@ -323,35 +286,27 @@ void ADedicatedGameMode::AssignJobs()
     MafiaGameState->SetMafiaCount(MafiaCount);
     MafiaGameState->SetCitizenTeamCount(CitizenTeamCount);
     MafiaGameState->SetAlivePlayerCount(6);
-
-
 }
 
-// 모든 플레이어를 시작 위치로 이동 (멀티캐스트)
+/**
+ * @brief [Multicast] Resets all living players to their original spawn positions.
+ */
 void ADedicatedGameMode::MulticastMovePlayersToStart_Implementation()
 {
     if (!MafiaGameState) return;
 
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        APlayerController* PC = It->Get();
-        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(PC->PlayerState);
-        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
+        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
+        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(It->Get()->GetPawn());
 
-        if (PS && Char && PS->GetIsAlive())
+        if (PS && Char && PS->GetIsAlive() && !PS->GetSpawnPosition().IsZero())
         {
-            FString PlayerId = PS->GetPlayerHash();
-            FVector TargetLocation = PS->GetSpawnPosition();
-
-            if (!TargetLocation.IsZero())
-            {
-                Char->ForceMoveToLocation(TargetLocation);
-
-            }
+            Char->ForceMoveToLocation(PS->GetSpawnPosition());
         }
     }
 }
-// 게임 시작 (6명 모두 접속 시)
+
 void ADedicatedGameMode::StartGame()
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -359,13 +314,14 @@ void ADedicatedGameMode::StartGame()
     StartMorningPhase();
 }
 
-// 밤 페이즈 시작 (마피아/경찰/탐정 행동)
+/**
+ * @brief Transitions game to the Night phase. Disables movement and enables job abilities.
+ */
 void ADedicatedGameMode::StartNightPhase()
 {
     if (!HasAuthority() || !MafiaGameState) return;
 
     SetNightTime();
-
     MafiaGameState->SetCurrentPhase(EGamePhase::Night);
     MafiaGameState->SetPhaseTimer(NIGHT_DURATION);
 
@@ -373,42 +329,27 @@ void ADedicatedGameMode::StartNightPhase()
     MafiaGameState->MulticastPhaseChanged(EGamePhase::Night, NIGHT_DURATION);
 
     GetWorld()->GetTimerManager().SetTimer(PhaseTimerHandle, this, &ADedicatedGameMode::OnPhaseTimeEnd, NIGHT_DURATION, false);
-    FString text = FString::Printf(TEXT("===== 밤 시작 (2분) - 이동 불가 ====="));
-    ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-    UE_LOG(LogTemp, Warning, TEXT("===== 밤 시작 (2분) - 이동 불가 ====="));
+    ALLUpdateMessage(-1, 20.0f, FColor::Green, TEXT("===== Night Phase Started (Movement Disabled) ====="));
 }
-// 플레이어 대기 페이즈
-auto ADedicatedGameMode::WaitPlayerPhase()
+
+void ADedicatedGameMode::WaitPlayerPhase()
 {
     if (!HasAuthority() || !MafiaGameState) return;
-
-
-
     MafiaGameState->SetCurrentPhase(EGamePhase::Waiting);
-
-
     MulticastSetMovementEnabled(true);
-
-
-    //UE_LOG(LogTemp, Warning, TEXT("플레이어 기달리는중"));
 }
-// 아침 페이즈 시작 (밤 결과 공개)
+
+/**
+ * @brief Transitions game to the Morning phase. Processes results of the previous night.
+ */
 void ADedicatedGameMode::StartMorningPhase()
 {
     if (!HasAuthority() || !MafiaGameState) return;
 
     SetDayTime();
+    if (MafiaGameState->GetDayCount() != 1) ProcessNightResults();
+    if (CheckWinCondition()) return;
 
-    if (MafiaGameState->GetDayCount() != 1)
-    {
-        ProcessNightResults();
-    }
-
-    if (CheckWinCondition())
-    {
-
-        return;
-    }
     MafiaGameState->SetCurrentPhase(EGamePhase::Morning);
     MafiaGameState->SetPhaseTimer(MORNING_DURATION);
 
@@ -416,13 +357,12 @@ void ADedicatedGameMode::StartMorningPhase()
     MafiaGameState->MulticastPhaseChanged(EGamePhase::Morning, MORNING_DURATION);
 
     GetWorld()->GetTimerManager().SetTimer(PhaseTimerHandle, this, &ADedicatedGameMode::OnPhaseTimeEnd, MORNING_DURATION, false);
-    FString text = FString::Printf(TEXT("===== 아침/토론 시작 (5분) - 이동 가능 ====="));
-    ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-
-    UE_LOG(LogTemp, Warning, TEXT("===== 아침/토론 시작 (5분) - 이동 가능 ====="));
+    ALLUpdateMessage(-1, 20.0f, FColor::Green, TEXT("===== Morning Phase Started (Discussion Enabled) ====="));
 }
 
-// 투표 페이즈 시작
+/**
+ * @brief Transitions game to the Voting phase. Teleports players to pedestals.
+ */
 void ADedicatedGameMode::StartVotingPhase()
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -434,8 +374,7 @@ void ADedicatedGameMode::StartVotingPhase()
 
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-        if (PS)
+        if (AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState))
         {
             PS->ResetVotes();
         }
@@ -447,13 +386,12 @@ void ADedicatedGameMode::StartVotingPhase()
     MafiaGameState->MulticastPhaseChanged(EGamePhase::Voting, VOTING_DURATION);
 
     GetWorld()->GetTimerManager().SetTimer(PhaseTimerHandle, this, &ADedicatedGameMode::OnPhaseTimeEnd, VOTING_DURATION, false);
-    FString text = FString::Printf(TEXT("===== 투표 시작 (2분) - PlayerStart로 이동, 이동 불가 ====="));
-    ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-
-    UE_LOG(LogTemp, Warning, TEXT("===== 투표 시작 (2분) - PlayerStart로 이동, 이동 불가 ====="));
+    ALLUpdateMessage(-1, 20.0f, FColor::Green, TEXT("===== Voting Phase Started ====="));
 }
 
-// 유언 페이즈 시작
+/**
+ * @brief Initiates the Last Words phase for the most-voted player.
+ */
 void ADedicatedGameMode::StartLastWordsPhase(const FString& PlayerId)
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -466,70 +404,51 @@ void ADedicatedGameMode::StartLastWordsPhase(const FString& PlayerId)
 
     MafiaGameState->MulticastPhaseChanged(EGamePhase::LastWords, LASTWORDS_DURATION);
 
-    // 처형 대상자를 ExecutionSite로 이동
+    // Teleport the accused to the execution site
     AMafiaPlayerState* ExecutedPS = FindPlayerStateByHash(PlayerId);
     if (ExecutedPS)
     {
         APlayerController* PC = Cast<APlayerController>(ExecutedPS->GetOwner());
-        if (PC)
+        ADedicatedCharacter* Char = PC ? Cast<ADedicatedCharacter>(PC->GetPawn()) : nullptr;
+        
+        if (Char && !ExecutionSiteLocation.IsZero())
         {
-            ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-            if (Char && !ExecutionSiteLocation.IsZero())
-            {
-                Char->ForceMoveToLocation(ExecutionSiteLocation);
-
-                FString text = FString::Printf(TEXT("%s 님이 처형대로 이동"), *Char->GetPlayerName());
-                ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-                //UE_LOG(LogTemp, Warning, TEXT("플레이어 %s를 ExecutionSite로 이동"), *PlayerId);
-            }
-
+            Char->ForceMoveToLocation(ExecutionSiteLocation);
+            ALLUpdateMessage(-1, 20.0f, FColor::Green, FString::Printf(TEXT("%s has been taken to the execution stand."), *ExecutedPS->GetNickName()));
         }
     }
 
     GetWorld()->GetTimerManager().SetTimer(PhaseTimerHandle, this, &ADedicatedGameMode::OnPhaseTimeEnd, LASTWORDS_DURATION, false);
-
-    UE_LOG(LogTemp, Warning, TEXT("===== 플레이어 %s 유언 시간 (10초) ====="), *PlayerId);
 }
 
-// 처형 실행
+/**
+ * @brief Executes the player and updates game state (counts and win conditions).
+ */
 void ADedicatedGameMode::ProcessExecution()
 {
     if (!HasAuthority() || !MafiaGameState) return;
 
     FString ExecutedPlayerId = MafiaGameState->GetExecutedPlayerId();
-    if (ExecutedPlayerId.IsEmpty()) return;
-
     AMafiaPlayerState* ExecutedPS = FindPlayerStateByHash(ExecutedPlayerId);
     if (!ExecutedPS) return;
 
-    FString ExcutedPlayerNickName = ExecutedPS->GetNickName();
     ExecutedPS->SetAlive(false);
-    FString text = FString::Printf(TEXT("플레이어 %s 처형됨 직업: %s"), *ExcutedPlayerNickName, *ExecutedPS->GetJobName());
-    ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-    UE_LOG(LogTemp, Warning, TEXT("유언: %s"), *LastWords);
+    ALLUpdateMessage(-1, 20.0f, FColor::Green, FString::Printf(TEXT("%s has been executed. Job: %s"), *ExecutedPS->GetNickName(), *ExecutedPS->GetJobName()));
 
     MafiaGameState->MulticastNotifyPlayerDeath(ExecutedPlayerId, ExecutedPS->GetNickName());
     MafiaGameState->MulticastNotifyLastWords(ExecutedPS->GetNickName(), LastWords);
 
-    // 모든 플레이어의 visibility 업데이트
+    // Refresh visibility for all players based on death status
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-
-        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-        if (PS)
+        if (AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState))
         {
             PS->UpdateAllCharacterVisibility();
         }
     }
 
-    if (ExecutedPS->GetJobType() == EJobType::Mafia)
-    {
-        MafiaGameState->SetMafiaCount(MafiaGameState->GetMafiaCount() - 1);
-    }
-    else
-    {
-        MafiaGameState->SetCitizenTeamCount(MafiaGameState->GetCitizenTeamCount() - 1);
-    }
+    if (ExecutedPS->GetJobType() == EJobType::Mafia) MafiaGameState->SetMafiaCount(MafiaGameState->GetMafiaCount() - 1);
+    else MafiaGameState->SetCitizenTeamCount(MafiaGameState->GetCitizenTeamCount() - 1);
 
     MafiaGameState->SetAlivePlayerCount(MafiaGameState->GetAlivePlayerCount() - 1);
     LastWords = TEXT("");
@@ -540,76 +459,49 @@ void ADedicatedGameMode::ProcessExecution()
     StartNightPhase();
 }
 
-// 페이즈 타이머 종료 시 호출
+/**
+ * @brief Timer callback for phase transitions.
+ */
 void ADedicatedGameMode::OnPhaseTimeEnd()
 {
     if (!HasAuthority() || !MafiaGameState) return;
 
     switch (MafiaGameState->GetCurrentPhase())
     {
-    case EGamePhase::Night:
-        StartMorningPhase();
-        break;
-
-    case EGamePhase::Morning:
-        StartVotingPhase();
-        break;
-
-    case EGamePhase::Voting:
-        ProcessVotingResults();
-        break;
-
-    case EGamePhase::LastWords:
-        ProcessExecution();
-        break;
-
-    default:
-        break;
+    case EGamePhase::Night:     StartMorningPhase(); break;
+    case EGamePhase::Morning:   StartVotingPhase(); break;
+    case EGamePhase::Voting:    ProcessVotingResults(); break;
+    case EGamePhase::LastWords: ProcessExecution(); break;
+    default: break;
     }
 }
 
-// 밤 행동 처리 (서버 RPC)
+/**
+ * @brief [Server RPC] Processes specific night-time targets selected by players.
+ */
 void ADedicatedGameMode::ServerProcessNightAction_Implementation(const FString& PlayerId, const FString& TargetId)
 {
-    if (!HasAuthority() || !MafiaGameState)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("ServerProcessNightAction_Implementation !HasAuthority() || !MafiaGameState"));
-        return;
-    }
-    if (MafiaGameState->GetCurrentPhase() != EGamePhase::Night)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("ServerProcessNightAction_Implementation it isn't night"));
-        return;
-    }
+    if (!HasAuthority() || !MafiaGameState || MafiaGameState->GetCurrentPhase() != EGamePhase::Night) return;
+
     AMafiaPlayerState* PS = FindPlayerStateByHash(PlayerId);
-    if (!PS || !PS->GetIsAlive() || !PS->CanNightAction())
-    {
-        return;
-    }
+    if (!PS || !PS->GetIsAlive() || !PS->CanNightAction()) return;
+
     AMafiaPlayerState* TPS = FindPlayerStateByHash(TargetId);
-    FString text;
-    text.Empty();
+    
+    NightActions.Add(PlayerId, TargetId);
+    PS->SetTarget(TargetId);
+
     if (TPS && TPS->GetIsAlive())
     {
-        text = FString::Printf(TEXT("플레이어 %s를 선택"), *TPS->GetNickName());
+        APlayerController* PC = Cast<APlayerController>(PS->GetOwner());
+        ADedicatedCharacter* Char = PC ? Cast<ADedicatedCharacter>(PC->GetPawn()) : nullptr;
+        UpdateMessage(Char, -1, 20.0f, FColor::Green, FString::Printf(TEXT("Selected target: %s"), *TPS->GetNickName()));
     }
-    if (NightActions.Contains(PlayerId))
-    {
-        NightActions.Remove(PlayerId);
-    }
-
-    PS->SetTarget(TargetId);
-    NightActions.Add(PlayerId, TargetId);
-    APlayerController* PC = Cast<APlayerController>(PS->GetOwner());
-    if (PC)
-    {
-        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-        UpdateMessage(Char, -1, 20.0f, FColor::Green, text);
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("플레이어 %s가 플레이어 %s를 선택"), *PlayerId, *TargetId);
 }
-// 밤 결과 처리 (마피아 공격, 경찰 조사, 탐정 조사)
+
+/**
+ * @brief Calculates and broadcasts the results of night-time abilities.
+ */
 void ADedicatedGameMode::ProcessNightResults()
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -618,201 +510,120 @@ void ADedicatedGameMode::ProcessNightResults()
     FString PoliceTargetId = TEXT("");
     FString DetectiveTargetId = TEXT("");
 
+    // Identify primary actions from living special roles
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
         AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-        if (!PS || !PS->GetIsAlive()) continue;
+        if (!PS || !PS->GetIsAlive() || PS->GetTargetPlayerId().IsEmpty()) continue;
 
         FString TargetId = PS->GetTargetPlayerId();
-        if (TargetId.IsEmpty()) continue;
-
         switch (PS->GetJobType())
         {
-        case EJobType::Mafia:
-            KilledPlayerId = TargetId;
-            break;
-        case EJobType::Police:
-            PoliceTargetId = TargetId;
-            break;
-        case EJobType::Detective:
-            DetectiveTargetId = TargetId;
-            break;
-        default:
-            break;
+        case EJobType::Mafia:     KilledPlayerId = TargetId; break;
+        case EJobType::Police:    PoliceTargetId = TargetId; break;
+        case EJobType::Detective: DetectiveTargetId = TargetId; break;
+        default: break;
         }
     }
 
-    //UE_LOG(LogTemp, Warning, TEXT("===== %d일차 아침 ====="), MafiaGameState->GetDayCount());
-
+    // Process Mafia Kill
     if (!KilledPlayerId.IsEmpty())
     {
-        AMafiaPlayerState* KilledPS = FindPlayerStateByHash(KilledPlayerId);
-        if (KilledPS)
+        if (AMafiaPlayerState* KilledPS = FindPlayerStateByHash(KilledPlayerId))
         {
             KilledPS->SetAlive(false);
             MafiaGameState->MulticastNotifyPlayerDeath(KilledPlayerId, KilledPS->GetNickName());
-
-            if (KilledPS->GetJobType() != EJobType::Mafia)
-            {
-                MafiaGameState->SetCitizenTeamCount(MafiaGameState->GetCitizenTeamCount() - 1);
-            }
+            if (KilledPS->GetJobType() != EJobType::Mafia) MafiaGameState->SetCitizenTeamCount(MafiaGameState->GetCitizenTeamCount() - 1);
             MafiaGameState->SetAlivePlayerCount(MafiaGameState->GetAlivePlayerCount() - 1);
-
-            // 모든 플레이어의 visibility 업데이트
+            
             for (FConstPlayerControllerIterator VisIt = GetWorld()->GetPlayerControllerIterator(); VisIt; ++VisIt)
             {
-                AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(VisIt->Get()->PlayerState);
-                if (PS)
-                {
-                    PS->UpdateAllCharacterVisibility();
-                }
+                if (AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(VisIt->Get()->PlayerState)) PS->UpdateAllCharacterVisibility();
             }
         }
     }
 
+    // Process Police Investigation
     if (!PoliceTargetId.IsEmpty())
     {
-        AMafiaPlayerState* TargetPS = FindPlayerStateByHash(PoliceTargetId);
-        if (TargetPS)
+        if (AMafiaPlayerState* TargetPS = FindPlayerStateByHash(PoliceTargetId))
         {
             bool bIsMafia = (TargetPS->GetJobType() == EJobType::Mafia);
-            FString TargetNickName = TargetPS->GetNickName();
             for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
             {
                 AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
                 if (PS && PS->GetJobType() == EJobType::Police)
                 {
-                    PS->SetInvestigationResult(bIsMafia);
-                    PS->ClientNotifyInvestigationResult(TargetNickName, bIsMafia);
+                    PS->ClientNotifyInvestigationResult(TargetPS->GetNickName(), bIsMafia);
                     break;
                 }
             }
         }
     }
-    AMafiaPlayerState* DetectivePS = nullptr;
-    AMafiaPlayerState* VisitedIdPS = nullptr;
+
+    // Process Detective Surveillance
     if (!DetectiveTargetId.IsEmpty())
     {
-        FString VisitInfo;
-
-        if (NightActions.Contains(DetectiveTargetId))
-        {
-            FString VisitedId = NightActions[DetectiveTargetId];
-            DetectivePS = FindPlayerStateByHash(DetectiveTargetId);
-            VisitedIdPS = FindPlayerStateByHash(VisitedId);
-            if (DetectivePS && VisitedIdPS)
-                VisitInfo = FString::Printf(TEXT("플레이어 %s가 플레이어 %s를 방문했습니다."),
-                    *DetectivePS->GetNickName(), *VisitedIdPS->GetNickName());
-        }
-        else
-        {
-            VisitInfo = FString::Printf(TEXT("플레이어 %s는 아무도 방문하지 않았습니다."),
-                *DetectiveTargetId);
-        }
+        FString VisitInfo = NightActions.Contains(DetectiveTargetId) ? 
+            FString::Printf(TEXT("%s visited %s."), *FindPlayerStateByHash(DetectiveTargetId)->GetNickName(), *FindPlayerStateByHash(NightActions[DetectiveTargetId])->GetNickName()) :
+            FString::Printf(TEXT("%s did not visit anyone."), *DetectiveTargetId);
 
         for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
         {
             AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-            if (!PS || !PS->GetIsAlive())continue;
-
-            APlayerController* PC = Cast<APlayerController>(PS->GetOwner());
-            if (!PC)continue;
-
-            ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-            if (PS->GetJobType() == EJobType::Detective)
+            if (PS && PS->GetIsAlive() && PS->GetJobType() == EJobType::Detective)
             {
-                PS->SetVisitInfo(VisitInfo);
-                UpdateMessage(Char, -1, 20.0f, FColor::Green, VisitInfo);
+                UpdateMessage(Cast<ADedicatedCharacter>(Cast<APlayerController>(PS->GetOwner())->GetPawn()), -1, 20.0f, FColor::Green, VisitInfo);
                 break;
             }
         }
     }
 
+    // Clean up night state
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-        if (PS)
-        {
-            PS->ResetTarget();
-        }
+        if (AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState)) PS->ResetTarget();
     }
     NightActions.Empty();
 }
 
-
-// 투표 처리 (서버 RPC)
+/**
+ * @brief [Server RPC] Processes a vote cast by a player during the voting phase.
+ */
 void ADedicatedGameMode::ServerCastVote_Implementation(const FString& VoterId, const FString& TargetId)
 {
-    if (!HasAuthority() || !MafiaGameState)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("!HasAuthority() || !MafiaGameState"));
-        return;
-    }
-    if (MafiaGameState->GetCurrentPhase() != EGamePhase::Voting)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("!= EGamePhase::Voting"));
-        return;
-    }
+    if (!HasAuthority() || !MafiaGameState || MafiaGameState->GetCurrentPhase() != EGamePhase::Voting) return;
+
     AMafiaPlayerState* VoterPS = FindPlayerStateByHash(VoterId);
     AMafiaPlayerState* TargetPS = FindPlayerStateByHash(TargetId);
 
-    if (!VoterPS || !TargetPS)
-    {
-        if (!VoterPS)
-        {
-            //UE_LOG(LogTemp, Warning, TEXT("!VoterPS"));
-        }
-        if (!TargetPS)
-        {
-            //UE_LOG(LogTemp, Warning, TEXT("!TargetPS"));
-        }
-        return;
-    }
-    if (!VoterPS->GetIsAlive() || !TargetPS->GetIsAlive())
-    {
-        if (!VoterPS->GetIsAlive())
-        {
-            UE_LOG(LogTemp, Warning, TEXT("!VoterPS->GetIsAlive()"));
-        }
-        if (!TargetPS->GetIsAlive())
-        {
-            UE_LOG(LogTemp, Warning, TEXT("!TargetPS->GetIsAlive()"));
-        }
-        return;
-    }
+    if (!VoterPS || !TargetPS || !VoterPS->GetIsAlive() || !TargetPS->GetIsAlive()) return;
+
+    // Handle vote revocation if player changes their mind
     if (VoteMap.Contains(VoterId))
     {
-        FString PreviousTargetId = VoteMap[VoterId];
-        AMafiaPlayerState* PreviousTargetPS = FindPlayerStateByHash(PreviousTargetId);
-
-        if (PreviousTargetPS)
+        if (AMafiaPlayerState* PrevTargetPS = FindPlayerStateByHash(VoteMap[VoterId]))
         {
-            int32 NewVoteCount = FMath::Max(0, PreviousTargetPS->GetVoteCount() - 1);
-            PreviousTargetPS->SetVoteCount(NewVoteCount);
-
-            MulticastNotifyVoteUpdate(PreviousTargetId, NewVoteCount);
-            UE_LOG(LogTemp, Warning, TEXT("플레이어 %s의 이전 투표 취소 (타겟: %s)"), *VoterId, *PreviousTargetId);
+            int32 NewCount = FMath::Max(0, PrevTargetPS->GetVoteCount() - 1);
+            PrevTargetPS->SetVoteCount(NewCount);
+            MulticastNotifyVoteUpdate(VoteMap[VoterId], NewCount);
         }
-
         VoteMap.Remove(VoterId);
     }
 
     VoteMap.Add(VoterId, TargetId);
     TargetPS->AddVote();
-
     MulticastNotifyVoteUpdate(TargetId, TargetPS->GetVoteCount());
-    //UpdateMessage() 
-    UE_LOG(LogTemp, Warning, TEXT("플레이어 %s가 플레이어 %s에게 투표 (총 %d표)"),
-        *VoterId, *TargetId, TargetPS->GetVoteCount());
 }
 
-// 투표 결과 집계 (최다 득표자 처형)
+/**
+ * @brief Tallys votes and determines if a majority was reached for execution.
+ */
 void ADedicatedGameMode::ProcessVotingResults()
 {
     if (!HasAuthority() || !MafiaGameState) return;
 
-    int32 AliveCount = MafiaGameState->GetAlivePlayerCount();
-    int32 MajorityVotes = (AliveCount / 2) + 1;
+    int32 MajorityVotes = (MafiaGameState->GetAlivePlayerCount() / 2) + 1;
     int32 MaxVotes = 0;
     FString MostVotedPlayerId = TEXT("");
     int32 TieCount = 0;
@@ -822,72 +633,41 @@ void ADedicatedGameMode::ProcessVotingResults()
         AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
         if (!PS || !PS->GetIsAlive()) continue;
 
-        int32 Votes = PS->GetVoteCount();
-
-        if (Votes > MaxVotes)
+        if (PS->GetVoteCount() > MaxVotes)
         {
-            MaxVotes = Votes;
+            MaxVotes = PS->GetVoteCount();
             MostVotedPlayerId = PS->GetPlayerHash();
             TieCount = 1;
         }
-        else if (Votes == MaxVotes && Votes > 0)
-        {
-            TieCount++;
-        }
+        else if (PS->GetVoteCount() == MaxVotes && MaxVotes > 0) TieCount++;
     }
-
-    //UE_LOG(LogTemp, Warning, TEXT("투표 결과: 최다 득표 %d표"), MaxVotes);
 
     if (MaxVotes >= MajorityVotes && TieCount == 1)
     {
-
-        AMafiaPlayerState* MaxVotesPS = FindPlayerStateByHash(MostVotedPlayerId);
-        if (MaxVotesPS)
-        {
-            FString text = FString::Printf(TEXT("플레이어 %s가 과반수 득표로 처형 대상"), *MaxVotesPS->GetNickName());
-
-            ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-        }
-        //UE_LOG(LogTemp, Warning, TEXT("플레이어 %s가 과반수 득표로 처형 대상"), *MostVotedPlayerId);
+        AMafiaPlayerState* TargetPS = FindPlayerStateByHash(MostVotedPlayerId);
+        ALLUpdateMessage(-1, 20.0f, FColor::Green, FString::Printf(TEXT("%s has been selected for execution by majority vote."), *TargetPS->GetNickName()));
         StartLastWordsPhase(MostVotedPlayerId);
     }
     else
     {
-        FString text;
-        if (TieCount > 1)
-        {
-            text = FString::Printf(TEXT("동점으로 아무도 처형되지 않음"));
-
-        }
-        else
-        {
-            text = FString::Printf(TEXT("과반수 미달로 아무도 처형되지 않음"));
-
-        }
-        ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-        if (CheckWinCondition())
-        {
-            //disconnect to server
-            return;
-        }
-
+        FString ResultText = (TieCount > 1) ? TEXT("No one was executed due to a tie.") : TEXT("No one was executed due to a lack of majority.");
+        ALLUpdateMessage(-1, 20.0f, FColor::Green, ResultText);
+        
+        if (CheckWinCondition()) return;
         MafiaGameState->SetDayCount(MafiaGameState->GetDayCount() + 1);
         StartNightPhase();
     }
 }
 
-// 유언 제출 (서버 RPC)
 void ADedicatedGameMode::ServerSubmitLastWords_Implementation(const FString& PlayerId, const FString& Words)
 {
-    if (!HasAuthority() || !MafiaGameState) return;
-    if (MafiaGameState->GetCurrentPhase() != EGamePhase::LastWords) return;
-    if (PlayerId != MafiaGameState->GetExecutedPlayerId()) return;
-
-    LastWords = Words;
-    //UE_LOG(LogTemp, Warning, TEXT("플레이어 %s의 유언: %s"), *PlayerId, *Words);
+    if (!HasAuthority() || !MafiaGameState || MafiaGameState->GetCurrentPhase() != EGamePhase::LastWords) return;
+    if (PlayerId == MafiaGameState->GetExecutedPlayerId()) LastWords = Words;
 }
 
-// 승리 조건 체크 (마피아 수 vs 시민팀 수)
+/**
+ * @brief Evaluates current player counts to determine the winner.
+ */
 bool ADedicatedGameMode::CheckWinCondition()
 {
     if (!HasAuthority() || !MafiaGameState) return false;
@@ -895,25 +675,19 @@ bool ADedicatedGameMode::CheckWinCondition()
     int32 AliveCount = MafiaGameState->GetAlivePlayerCount();
     int32 MafiaCount = MafiaGameState->GetMafiaCount();
 
-    if (MafiaCount == 0)
+    if (MafiaCount == 0) // Citizens win
     {
         MafiaGameState->SetCurrentPhase(EGamePhase::GameOver);
         MafiaGameState->MulticastGameOver(false);
-        FString text = FString::Printf(TEXT("시민팀 승리!"));
-        ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-
-        //UE_LOG(LogTemp, Warning, TEXT("시민팀 승리!"));
+        ALLUpdateMessage(-1, 20.0f, FColor::Green, TEXT("Citizens Win!"));
         return true;
     }
 
-    if (AliveCount == 2 && MafiaCount == 1)
+    if (AliveCount == 2 && MafiaCount == 1) // Mafia wins (Majority reached)
     {
         MafiaGameState->SetCurrentPhase(EGamePhase::GameOver);
         MafiaGameState->MulticastGameOver(true);
-        FString text = FString::Printf(TEXT("마피아 승리!"));
-        ALLUpdateMessage(-1, 20.0f, FColor::Green, text);
-
-        //UE_LOG(LogTemp, Warning, TEXT("마피아 승리!"));
+        ALLUpdateMessage(-1, 20.0f, FColor::Green, TEXT("Mafia Wins!"));
         return true;
     }
 
@@ -925,43 +699,30 @@ AMafiaPlayerState* ADedicatedGameMode::FindPlayerStateByHash(const FString& Play
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
         AMafiaPlayerState* PS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
-        if (PS && PS->GetPlayerHash() == PlayerHash)
-        {
-            return PS;
-        }
+        if (PS && PS->GetPlayerHash() == PlayerHash) return PS;
     }
     return nullptr;
 }
 
-// 모든 플레이어에게 메시지 전송
+/**
+ * @brief Broadcasts a debug message to all pawns in the game.
+ */
 void ADedicatedGameMode::ALLUpdateMessage(int key, float delay, FColor col, const FString& Text)
 {
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        APlayerController* PC = It->Get();
-        if (PC)
-        {
-            ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-            if (Char)
-            {
-                Char->ClientShowMessage(key, delay, col, Text);
-            }
-        }
+        if (ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(It->Get()->GetPawn())) Char->ClientShowMessage(key, delay, col, Text);
     }
-
 }
 
-// 특정 플레이어에게 메시지 전송
 void ADedicatedGameMode::UpdateMessage(ADedicatedCharacter* Char, int key, float delay, FColor col, const FString& Text)
 {
-    if (Char)
-    {
-        Char->ClientShowMessage(key, delay, col, Text);
-    }
+    if (Char) Char->ClientShowMessage(key, delay, col, Text);
 }
 
-
-// 채팅 메시지 처리 (서버 RPC)
+/**
+ * @brief [Server RPC] Handles and filters chat messages based on phase and death status.
+ */
 void ADedicatedGameMode::ServerSendChatMessage_Implementation(const FString& SenderHash, const FString& Message)
 {
     if (!HasAuthority() || !MafiaGameState) return;
@@ -969,87 +730,41 @@ void ADedicatedGameMode::ServerSendChatMessage_Implementation(const FString& Sen
     AMafiaPlayerState* SenderPS = FindPlayerStateByHash(SenderHash);
     if (!SenderPS) return;
 
-    bool bSenderIsAlive = SenderPS->GetIsAlive();
-    FString SenderName = SenderPS->GetPlayerName();
+    // Filter: Accused can chat during Last Words, dead players can only chat with the dead.
+    if (MafiaGameState->GetCurrentPhase() == EGamePhase::LastWords && SenderHash != MafiaGameState->GetExecutedPlayerId()) return;
 
-    EGamePhase CurrentPhase = MafiaGameState->GetCurrentPhase();
-
-    if (CurrentPhase == EGamePhase::LastWords)
-    {
-        FString ExecutedPlayerId = MafiaGameState->GetExecutedPlayerId();
-        if (SenderHash != ExecutedPlayerId)
-        {
-            return;
-        }
-    }
-
-    FLinearColor MessageColor;
-
-    if (CurrentPhase == EGamePhase::LastWords && SenderHash == MafiaGameState->GetExecutedPlayerId())
-    {
-        MessageColor = FLinearColor::Red;
-    }
-    else if (!bSenderIsAlive)
-    {
-        MessageColor = FLinearColor::Gray;
-    }
-    else
-    {
-        MessageColor = FLinearColor::White;
-    }
+    FLinearColor MessageColor = FLinearColor::White;
+    if (MafiaGameState->GetCurrentPhase() == EGamePhase::LastWords) MessageColor = FLinearColor::Red;
+    else if (!SenderPS->GetIsAlive()) MessageColor = FLinearColor::Gray;
 
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        APlayerController* PC = It->Get();
-        AMafiaPlayerState* ReceiverPS = Cast<AMafiaPlayerState>(PC->PlayerState);
-
+        AMafiaPlayerState* ReceiverPS = Cast<AMafiaPlayerState>(It->Get()->PlayerState);
         if (!ReceiverPS) continue;
 
-        bool bReceiverIsAlive = ReceiverPS->GetIsAlive();
-
-        bool bShouldReceive = false;
-
-        if (bSenderIsAlive)
+        // Implementation of 'Ghost Chat' (Dead players only receive messages from other dead players)
+        if (SenderPS->GetIsAlive() || (!SenderPS->GetIsAlive() && !ReceiverPS->GetIsAlive()))
         {
-            bShouldReceive = true;
-        }
-        else
-        {
-            if (!bReceiverIsAlive)
-            {
-                bShouldReceive = true;
-            }
-        }
-
-        if (bShouldReceive)
-        {
-            ReceiverPS->ClientReceiveChatMessage(SenderHash, SenderName, Message, !bSenderIsAlive, MessageColor);
+            ReceiverPS->ClientReceiveChatMessage(SenderHash, SenderPS->GetNickName(), Message, !SenderPS->GetIsAlive(), MessageColor);
         }
     }
 }
 
-// 플레이어 이동 활성화/비활성화 (멀티캐스트)
+/**
+ * @brief [Multicast] Toggles movement component for all player characters.
+ */
 void ADedicatedGameMode::MulticastSetMovementEnabled_Implementation(bool bEnabled)
 {
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        APlayerController* PC = It->Get();
-        ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(PC->GetPawn());
-
-        if (Char && Char->GetCharacterMovement())
+        if (ADedicatedCharacter* Char = Cast<ADedicatedCharacter>(It->Get()->GetPawn()))
         {
-            Char->GetCharacterMovement()->SetMovementMode(bEnabled ? MOVE_Walking : MOVE_None);
+            if (Char->GetCharacterMovement()) Char->GetCharacterMovement()->SetMovementMode(bEnabled ? MOVE_Walking : MOVE_None);
         }
     }
-
-    //UE_LOG(LogTemp, Warning, TEXT("이동 %s"), bEnabled ? TEXT("활성화") : TEXT("비활성화"));
 }
 
-
-
-// 투표 업데이트 알림 (멀티캐스트)
 void ADedicatedGameMode::MulticastNotifyVoteUpdate_Implementation(const FString& PlayerId, int32 NewVoteCount)
 {
-
-    //UE_LOG(LogTemp, Warning, TEXT("플레이어 %s 투표 수: %d"), *PlayerId, NewVoteCount);
+    // Implementation for real-time UI vote counter update on clients
 }
