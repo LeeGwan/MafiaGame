@@ -1,22 +1,32 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "CompactBinaryReader.h"
-// 기본 생성자 (오브젝트 초기화)
+
+/**
+ * @brief Default constructor. Initializes the reader state to null.
+ */
 CompactBinaryReader::CompactBinaryReader()
     : DataPtr(nullptr)
     , DataSize(0)
     , DataOffset(0)
 {
 }
-// 내부 상태 초기화
+
+/**
+ * @brief Resets the internal state and invalidates the data pointer.
+ */
 void CompactBinaryReader::Clear()
 {
     DataPtr = nullptr;
     DataSize = 0;
     DataOffset = 0;
 }
-// 내부 포인터 초기화
+
+/**
+ * @brief Initializes the reader with a payload and its size.
+ * @param PayloadPtr Pointer to the binary data buffer.
+ * @param Size Total size of the buffer in bytes.
+ */
 void CompactBinaryReader::Init(const uint8* PayloadPtr, SIZE_T Size)
 {
     DataPtr = PayloadPtr;
@@ -24,13 +34,19 @@ void CompactBinaryReader::Init(const uint8* PayloadPtr, SIZE_T Size)
     DataOffset = 0;
 }
 
-
-// 지정된 바이트만큼 읽을 수 있는지 확인
+/**
+ * @brief Validates if the requested number of bytes can be read from the current offset.
+ * @param Bytes Number of bytes to check.
+ * @return True if data is available, false if it would cause an overflow.
+ */
 bool CompactBinaryReader::HasData(SIZE_T Bytes) const
 {
     return DataOffset + Bytes <= DataSize;
 }
-// 단일 바이트 읽기
+
+/**
+ * @brief Reads a single unsigned byte (8-bit) from the buffer.
+ */
 uint8 CompactBinaryReader::ReadUInt8()
 {
     if (!HasData(1))
@@ -40,7 +56,10 @@ uint8 CompactBinaryReader::ReadUInt8()
     
     return DataPtr[DataOffset++];
 }
-// 2바이트 unsigned 읽기 (리틀 엔디안)
+
+/**
+ * @brief Reads a 16-bit unsigned integer (Little-Endian).
+ */
 uint16 CompactBinaryReader::ReadUInt16()
 {
     if (!HasData(2))
@@ -48,12 +67,16 @@ uint16 CompactBinaryReader::ReadUInt16()
         return 0;
     }
     
+    // Explicit Little-Endian reconstruction
     uint16 Result = static_cast<uint16>(DataPtr[DataOffset] |
-                                       (DataPtr[DataOffset + 1] << 8));
+                                        (DataPtr[DataOffset + 1] << 8));
     DataOffset += 2;
     return Result;
 }
-// 2바이트 signed 읽기 (리틀 엔디안)
+
+/**
+ * @brief Reads a 16-bit signed integer (Little-Endian).
+ */
 int16 CompactBinaryReader::ReadInt16()
 {
     if (!HasData(2))
@@ -66,7 +89,10 @@ int16 CompactBinaryReader::ReadInt16()
     DataOffset += 2;
     return Result;
 }
-// 4바이트 unsigned 읽기 (리틀 엔디안)
+
+/**
+ * @brief Reads a 32-bit unsigned integer (Little-Endian).
+ */
 uint32 CompactBinaryReader::ReadUInt32()
 {
     if (!HasData(4))
@@ -74,6 +100,7 @@ uint32 CompactBinaryReader::ReadUInt32()
         return 0;
     }
     
+    // Reconstruct 32-bit value from bytes to ensure cross-platform compatibility
     uint32 Result = static_cast<uint32>(
         DataPtr[DataOffset] | 
         (DataPtr[DataOffset + 1] << 8) |
@@ -82,20 +109,32 @@ uint32 CompactBinaryReader::ReadUInt32()
     DataOffset += 4;
     return Result;
 }
-// 4바이트 signed 읽기
+
+/**
+ * @brief Reads a 32-bit signed integer.
+ */
 int32 CompactBinaryReader::ReadInt32()
 {
     return static_cast<int32>(ReadUInt32());
 }
-// 압축된 float 읽기 (정밀도 적용)
+
+/**
+ * @brief Decompresses and reads a float value using a predefined precision multiplier.
+ * @param Precision The scaling factor used to restore the float from an integer.
+ */
 float CompactBinaryReader::ReadCompactFloat(float Precision)
 {
     return static_cast<float>(ReadInt32()) * Precision;
 }
-// 문자열 읽기 (uint16 length + data)
-// 길이 검사: 요청된 길이가 없거나 100초과이면 빈 문자열 반환
+
+/**
+ * @brief Reads a string prefixed with a 16-bit length.
+ * Includes security checks for maximum length and buffer boundaries.
+ * @return FString containing the read data, or empty string on failure.
+ */
 FString CompactBinaryReader::ReadString()
 {
+    // Check if length prefix is available
     if (!HasData(2))
     {
         return TEXT("");
@@ -104,11 +143,13 @@ FString CompactBinaryReader::ReadString()
     uint16 Length = DataPtr[DataOffset] | (DataPtr[DataOffset + 1] << 8);
     DataOffset += 2;
     
+    // Validate string body size against remaining data
     if (!HasData(Length))
     {
         return TEXT("");
     }
     
+    // Anti-Spam/DoS check: Limit maximum string length
     if (Length > 100)
     {
         UE_LOG(LogTemp, Warning, TEXT("String length exceeds maximum allowed: %d"), Length);
@@ -126,27 +167,14 @@ FString CompactBinaryReader::ReadString()
 
     return Result;
 }
-// 문자열 벡터 읽기 (uint8 count + 각 문자열)
+
+/**
+ * @brief Reads an array of strings, prefixed with an 8-bit element count.
+ */
 TArray<FString> CompactBinaryReader::ReadStringArray()
 {
     uint8 Count = ReadUInt8();
     TArray<FString> Result;
     Result.Reserve(Count);
     
-    for (uint8 i = 0; i < Count; ++i)
-    {
-        Result.Add(ReadString());
-    }
-    
-    return Result;
-}
-// 비트 플래그 읽기
-uint8 CompactBinaryReader::ReadBitFlags()
-{
-    return ReadUInt8();
-}
-// bool 읽기
-bool CompactBinaryReader::ReadBool()
-{
-    return ReadUInt8() != 0;
-}
+    for (uint8 i =
