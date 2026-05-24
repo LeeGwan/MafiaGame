@@ -7,23 +7,47 @@
 #include "SocketSubsystem.h"
 #include "IPAddress.h"
 
-// 게임 로비 서버와 통신하는 커넥터 (플레이어 인증 정보 수신)
+/**
+ * @class ServerConnector
+ * @brief Establishes a foundational TCP link between the Dedicated Game Server and the Backend Lobby Server.
+ * * This class is responsible for the initial "Authoritative Handshake," fetching the validated 
+ * player session whitelist required for the game instance to begin its routine.
+ */
 class MAFIAGAME_API ServerConnector
 {
 public:
-	ServerConnector(const FString& InServerIP, int32 InPort);
-	~ServerConnector();
+    /**
+     * @brief Constructor: Configures the target backend server identity.
+     * @param InServerIP The destination IP address of the Lobby/Auth server.
+     * @param InPort The destination port for the TCP handshake.
+     */
+    ServerConnector(const FString& InServerIP, int32 InPort);
 
-	// 서버 연결 중지
-	void Stop();
+    /** @brief Destructor: Ensures active sockets are closed and resources are reclaimed. */
+    ~ServerConnector();
 
-	// 서버 연결 시작 및 인증 정보 수신
-	void Start();
+    /**
+     * @brief Manually terminates the connection and destroys the socket instance.
+     * Used for clean shutdowns or error recovery.
+     */
+    void Stop();
+
+    /**
+     * @brief Initializes the Socket Subsystem, connects to the backend, and listens for the authorization payload.
+     * This is a critical blocking operation performed during server initialization.
+     */
+    void Start();
 
 private:
-	FString ServerIP; // 게임 로비 서버 IP
-	int32 ServerPort; // 게임 로비 서버 포트
+    /** Target IP address for the backend infrastructure. */
+    FString ServerIP;
 
-	ISocketSubsystem* SocketSub;
-	FSocket* Socket;
+    /** Target port for the backend infrastructure. */
+    int32 ServerPort;
+
+    /** Reference to the platform-specific Socket Subsystem (e.g., Windows, Linux). */
+    ISocketSubsystem* SocketSub;
+
+    /** The low-level socket handle for raw binary communication. */
+    FSocket* Socket;
 };
