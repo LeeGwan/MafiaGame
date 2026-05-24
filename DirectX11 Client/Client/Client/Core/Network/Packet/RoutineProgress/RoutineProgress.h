@@ -1,5 +1,8 @@
-// 패킷 처리 엔진 (Thread Pool 기반, AES 암호화/복호화)
-// 네트워크로 수신된 패킷을 비동기로 처리하고, 클라이언트 요청을 서버로 전송
+/**
+ * @file RoutineProgress.h
+ * @brief Header for the asynchronous packet processing engine and thread-pool orchestration.
+ */
+
 #pragma once
 #include <atomic>
 #include <condition_variable>
@@ -12,81 +15,107 @@
 #include <thread>
 #include <vector>
 
+// Forward Declarations
+class Aes;                           
+class MafiaDatabase;                 
+class CompactBinaryReader;           
+enum class ResultType : uint8_t;     
+enum class PacketType : uint8_t;     
+struct TypePacket;                   
+struct ResultPacket;                 
+struct ResultAndHashPacket;          
+struct HashPacket;                   
+struct ServerInfoPacket;             
+struct ClientPacket;                 
+struct IntegrityCheckPacket;         
+struct stringforVectorPacket;        
 
-class Aes;                           // AES-256 암호화/복호화 클래스
-class MafiaDatabase;                 // 데이터베이스 클래스 (미사용)
-class CompactBinaryReader;           // 이진 패킷 역직렬화
-enum class ResultType : uint8_t;     // 서버 응답 결과 타입
-enum class PacketType : uint8_t;     // 패킷 타입
-struct TypePacket;                   // 타입만 포함된 패킷
-struct ResultPacket;                 // 결과 코드 패킷
-struct ResultAndHashPacket;          // 결과 + 세션 해시 패킷
-struct HashPacket;                   // 세션 해시 패킷
-struct ServerInfoPacket;             // 서버 IP/Port 정보 패킷
-struct ClientPacket;                 // 클라이언트 정보 패킷
-struct IntegrityCheckPacket;         // 하드웨어 무결성 검증 패킷
-struct stringforVectorPacket;        // 문자열 배열 패킷
-
+/**
+ * @class RoutineProgress
+ * @brief Manages a worker thread pool for asynchronous packet decryption, deserialization, and routing.
+ * * This class implements a Producer-Consumer pattern to decouple network I/O from 
+ * application logic, ensuring the UI thread remains responsive during heavy network traffic.
+ */
 class RoutineProgress {
 public:
-	// Thread Pool 초기화 (in_threadcount: Worker Thread 개수)
-	RoutineProgress(uint8_t in_threadcount);
-	~RoutineProgress();
+    /**
+     * @brief Constructor: Initializes the worker thread pool.
+     * @param in_threadcount Number of concurrent threads to spawn for packet processing.
+     */
+    RoutineProgress(uint8_t in_threadcount);
+    ~RoutineProgress();
 
-	// 복사 생성자 및 대입 연산자 삭제 (싱글톤)
-	RoutineProgress(const RoutineProgress&) = delete;
-	RoutineProgress& operator=(const RoutineProgress&) = delete;
+    // Deleted copy semantics to enforce Singleton/Unique ownership
+    RoutineProgress(const RoutineProgress&) = delete;
+    RoutineProgress& operator=(const RoutineProgress&) = delete;
 
-	// TypePacket 전송 (타입만 포함된 단순 패킷)
-	void SendResponseForTypePacket(PacketType type);
+    // --- Specialized Transmission Dispatchers ---
 
-	// TwoStringPacket 전송 (로그인/회원가입용, str1: 아이디, str2: 비밀번호)
-	void SendResponseForTwoStringPacket(PacketType type, const std::string& str1, const std::string& str2);
+    /** @brief Dispatches a header-only packet (Type only). */
+    void SendResponseForTypePacket(PacketType type);
 
-	// HashPacket 전송 (세션 해시 포함)
-	void SendResponseForHashPacket(PacketType type, const std::string& str1);
+    /** @brief Dispatches a dual-string packet (Used for Authentication/Registration). */
+    void SendResponseForTwoStringPacket(PacketType type, const std::string& str1, const std::string& str2);
 
-	// IntegrityCheckPacket 전송 (하드웨어 ID 정보)
-	void SendResponseForIntegrityCheckPacket(const IntegrityCheckPacket& packet);
+    /** @brief Dispatches a session hash packet for identity verification. */
+    void SendResponseForHashPacket(PacketType type, const std::string& str1);
 
-	// stringforVectorPacket 전송 (문자열 배열)
-	void SendResponseForstringforVectorPacket(const stringforVectorPacket& packet);
+    /** @brief Dispatches hardware-level integrity data for anti-cheat verification. */
+    void SendResponseForIntegrityCheckPacket(const IntegrityCheckPacket& packet);
 
-	// ResultPacket 전송 (작업 결과)
-	void SendResponseForstringforResultPacket(const ResultPacket& packet);
+    /** @brief Dispatches a collection of strings (e.g., lobby lists or player names). */
+    void SendResponseForstringforVectorPacket(const stringforVectorPacket& packet);
 
-	// 우선순위 패킷 (즉시 암호화하여 반환, 송신 큐를 거치지 않음)
-	std::vector<uint8_t> SendResponseForpriorityPacket(PacketType type, const std::string& str1);
+    /** @brief Dispatches a standardized result code packet. */
+    void SendResponseForstringforResultPacket(const ResultPacket& packet);
 
-	// 수신된 패킷을 처리 큐에 추가 (네트워크 스레드에서 호출)
-	void addToProgressQueue(const std::vector<uint8_t>& data);
+    /**
+     * @brief Dispatches a high-priority packet that bypasses the asynchronous queue.
+     * @return Raw encrypted ciphertext for immediate network transmission.
+     */
+    std::vector<uint8_t> SendResponseForpriorityPacket(PacketType type, const std::string& str1);
 
-	// Worker Thread 정리 및 종료
-	void Release();
+    /**
+     * @brief Enqueues raw network data into the processing queue.
+     * @note Typically called by the Network Receiver thread.
+     */
+    void addToProgressQueue(const std::vector<uint8_t>& data);
+
+    /** @brief Gracefully terminates all worker threads and cleans up resources. */
+    void Release();
 
 private:
-	uint8_t threadcount;                     // Worker Thread 개수
-	std::mutex client_sockets_mutex;         // 소켓 관리용 뮤텍스 (미사용)
-	std::vector<std::thread> ProsessThreads; // Worker Thread 배열
+    uint8_t threadcount;                          
+    std::mutex client_sockets_mutex;              
+    std::vector<std::thread> ProsessThreads;      
 
-	std::queue<std::vector<uint8_t>> data_queue;  // 처리 대기 중인 패킷 큐
-	std::mutex routine_queue_mutex;               // 큐 접근 동기화
-	std::condition_variable wakeUpthread;         // Worker Thread 깨우기
-	std::atomic<bool> ProsessThreads_status;      // Worker Thread 실행 상태
+    /** @section Task_Orchestration 
+     * Internal queue and synchronization primitives for the Producer-Consumer pattern.
+     */
+    std::queue<std::vector<uint8_t>> data_queue;  
+    std::mutex routine_queue_mutex;               
+    std::condition_variable wakeUpthread;         
+    std::atomic<bool> ProsessThreads_status;      
 
-	// 수신 패킷 AES 복호화 및 타입별 처리 (FindAccountServerResponse, LoginResponse 등)
-	void HandleReceivedPacket(const std::vector<uint8_t>& data);
+    /**
+     * @brief Logic dispatcher for decrypted packets.
+     * Decodes the binary stream and triggers the appropriate EventManager callbacks.
+     */
+    void HandleReceivedPacket(const std::vector<uint8_t>& data);
 
-	// Worker Thread 메인 루프 (큐에서 패킷을 꺼내 HandleReceivedPacket 호출)
-	void RoutineProgressWorkerThread(int threadId);
+    /** @brief Main execution loop for each worker thread in the pool. */
+    void RoutineProgressWorkerThread(int threadId);
 
-	// 네트워크 송신 큐에 데이터 추가
-	void SendData_to_Sendque(const std::vector<uint8_t>& data);
+    /** @brief Enqueues encrypted data to the network layer's egress queue. */
+    void SendData_to_Sendque(const std::vector<uint8_t>& data);
 
-	// 패킷 직렬화 + AES 암호화 + 송신 큐 추가 (템플릿)
-	template<typename T>
-	void SerializeAndSendResponse(const T& response_packet);
+    /**
+     * @brief Generic pipeline: Serialize -> Encrypt -> Dispatch.
+     * @tparam T The packet structure type.
+     */
+    template<typename T>
+    void SerializeAndSendResponse(const T& response_packet);
 };
 
-// 전역 싱글톤 인스턴스
+/** Global access to the RoutineProgress singleton. */
 extern std::unique_ptr<RoutineProgress> G_Routine;
