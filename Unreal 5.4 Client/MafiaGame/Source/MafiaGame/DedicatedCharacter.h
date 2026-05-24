@@ -1,3 +1,5 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -5,54 +7,69 @@
 #include "InputActionValue.h"
 #include "DedicatedCharacter.generated.h"
 
-// 마피아 게임 플레이어 캐릭터 (네트워크 복제 지원)
+/**
+ * @class ADedicatedCharacter
+ * @brief Main player character class for the Mafia Game.
+ * Implements network replication, top-down movement, and specialized game phase interactions.
+ */
 UCLASS()
 class ADedicatedCharacter : public ACharacter
 {
     GENERATED_BODY()
+
 public:
-    // 플레이어 이름 (네트워크 복제)
+    /** Player display name - Replicated to all clients */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_PlayerName, Category = "Player Info")
     FString PlayerName;
 
-    // 플레이어 이름 복제 시 호출되는 콜백
+    /** Callback triggered on clients when PlayerName is updated by the server */
     UFUNCTION()
     void OnRep_PlayerName();
 
 protected:
+    /** Unique session token for identifying the player across the network */
     UPROPERTY(Replicated)
-    FString PlayerId; // 플레이어 고유 세션 토큰
+    FString PlayerId;
 
+    /** Destination for movement, synchronized across the network */
     UPROPERTY(Replicated)
-    FVector TargetLocation; // 목표 이동 위치
+    FVector TargetLocation;
 
+    /** Movement state flag for network interpolation */
     UPROPERTY(Replicated)
-    bool bIsMovingToTarget; // 이동 중 여부
+    bool bIsMovingToTarget;
 
+    /** Base movement speed of the character */
     UPROPERTY(EditAnywhere, Category = "Movement")
     float MovementSpeed;
 
-    // Enhanced Input 시스템
+    /** Enhanced Input: Mapping context for player controls */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
     class UInputMappingContext* DefaultMappingContext;
 
+    /** Enhanced Input: Action for destination selection/interaction */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
     class UInputAction* SetDestinationClickAction;
 
+    /** Enhanced Input: Action for mobile touch interaction */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
     class UInputAction* SetDestinationTouchAction;
 
+    /** Niagara FX spawned at the cursor destination */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
     class UNiagaraSystem* FXCursor;
 
+    /** Time threshold to distinguish between a short interaction and a long-press movement */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
     float ShortPressThreshold = 0.5f;
 
-    // 플레이어 이름표 위젯
+    /** Screen-space widget component for player name and job display */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
     class UWidgetComponent* NameplateWidget;
 
+    /** Cached pointer to the UI widget for optimized updates */
     class UUserWidget* CachedNameplateWidget;
+    
     FTimerHandle JobsWidgetRetryTimer;
     int32 JobsWidgetRetryCount;
     FVector CachedDestination;
@@ -62,30 +79,34 @@ protected:
 public:
     ADedicatedCharacter();
 
+    // Overrides from ACharacter
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual void Tick(float DeltaTime) override;
     virtual void BeginPlay() override;
 
-    // 이름표 업데이트
+    /** Updates the visual nameplate UI with the current PlayerName */
     void UpdateNameplateWidgetForName();
 
-    // 직업 정보 업데이트 (클라이언트 RPC)
+    /** [Client RPC] Updates the player's job information on the local UI */
     UFUNCTION(Client, Reliable)
     void UpdateNameplateWidgetForJobs(const FString& Jobs);
 
-    // 화면 메시지 출력 (클라이언트 RPC)
+    /** [Client RPC] Displays a formatted message on the player's screen */
     UFUNCTION(Client, Reliable)
     void ClientShowMessage(int key, float delay, FColor col, const FString& Text);
 
-    // 입력 처리 함수들
+    /** Input handling methods */
     void OnInputStarted();
     void OnSetDestinationTriggered();
     void OnSetDestinationReleased();
     void OnTouchTriggered();
     void OnTouchReleased();
+    
+    /** Performs a trace under the cursor to identify the actor being interacted with */
     bool GetClickedActor(AActor*& OutActor);
 
+    /** Getters and Setters */
     FORCEINLINE FString GetPlayerId() const { return PlayerId; }
 
     UFUNCTION(BlueprintCallable)
@@ -94,45 +115,49 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Player Info")
     FString GetPlayerName() const { return PlayerName; }
 
-    // 서버에서 이동 처리
+    /** [Server RPC] Validates and processes a movement request from the client */
     UFUNCTION(Server, Reliable)
     void ServerMoveToLocation(FVector Location);
 
+    /** Sets the player name (Authority Only) */
     void SetPlayerName(const FString& Name);
+    
+    /** Initiates internal movement logic */
     void MoveToLocation(FVector Location);
 
-    // 모든 클라이언트에 이동 명령 (멀티캐스트)
+    /** [NetMulticast RPC] Forcefully synchronizes character location across all clients */
     UFUNCTION(NetMulticast, Reliable)
     void ForceMoveToLocation(FVector Location);
 
-    // 밤 행동 요청 (서버 RPC)
+    /** [Server RPC] Requests a specialized night-phase action (e.g., Kill, Investigate) */
     UFUNCTION(Server, Reliable)
     void ServerRequestNightAction(const FString& TargetId);
 
-    // 투표 요청 (서버 RPC)
+    /** [Server RPC] Casts a vote against a specific player during the voting phase */
     UFUNCTION(Server, Reliable)
     void ServerRequestVote(const FString& TargetId);
 
+    /** Camera and Boom accessors */
     FORCEINLINE class UCameraComponent* GetTopDownCameraComponent() const { return TopDownCameraComponent; }
     FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
-    // 채팅 메시지 전송
+    /** Broadcasts a chat message via the server */
     UFUNCTION(BlueprintCallable, Category = "Chat")
     void SendChatMessage(const FString& Message);
 
 private:
-    // 탑다운 뷰 카메라
+    /** Main top-down perspective camera */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
     class UCameraComponent* TopDownCameraComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
     UCameraComponent* FollowCamera;
 
-    // 카메라 붐
+    /** Spring arm component for camera positioning and smoothing */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
     class USpringArmComponent* CameraBoom;
 
-    // 캐릭터 메시 컴포넌트들
+    /** Modular Skeletal Meshes for character customization (e.g., skins, equipment) */
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = Mesh, meta = (AllowPrivateAccess = "true"))
     class USkeletalMeshComponent* SkeletalMeshComponent;
 
