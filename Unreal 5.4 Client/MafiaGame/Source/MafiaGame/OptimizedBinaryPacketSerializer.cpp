@@ -1,11 +1,17 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "OptimizedBinaryPacketSerializer.h"
 #include "CompactBinaryReader.h"
 #include "PacketStructure.h"
 #include "XXHash32.h"
-// SecurePacketHeader를 구성하고 XXHash를 계산해 헤더에 채워 넣음
+
+/**
+ * @brief Constructs a SecurePacketHeader and calculates the XXHash for the payload.
+ * The calculated hash is stored in the header to ensure packet integrity at the destination.
+ * * @param type The packet type identifier.
+ * @param data Pointer to the buffer containing the packet data.
+ * @param size Total size of the data buffer.
+ */
 void OptimizedBinaryPacketSerializer::WrapPacketWithXXHash(uint8 type, TArray<uint8>* data, SIZE_T size)
 {
     SecurePacketHeader header;
@@ -13,20 +19,33 @@ void OptimizedBinaryPacketSerializer::WrapPacketWithXXHash(uint8 type, TArray<ui
     header.version = VERSION;
     header.type = type;
     header.data_size = static_cast<uint32>(size - sizeof(SecurePacketHeader));
+
+    // Calculate non-cryptographic hash for fast integrity verification
     header.xxhash = XXHash32::hash(data->GetData() + sizeof(SecurePacketHeader), header.data_size);
+
+    // Write the finalized header to the beginning of the buffer
     FMemory::Memcpy(data->GetData(), &header, sizeof(SecurePacketHeader));
 }
-// 버퍼에 단일 바이트를 쓰고 오프셋 증가
+
+/**
+ * @brief Writes a single byte to the buffer and increments the offset.
+ */
 void OptimizedBinaryPacketSerializer::push(TArray<uint8>* buffer, uint8 value, SIZE_T& offset)
 {
     (*buffer)[offset] = value;
     offset += 1;
 }
-// 문자열 직렬화: 길이(uint16_t) + 데이터
+
+/**
+ * @brief Serializes an FString into the buffer.
+ * Format: [2-byte Length (uint16_t)] + [UTF-8 Data]
+ */
 void OptimizedBinaryPacketSerializer::SerializeString(TArray<uint8>* buffer, const FString& str, SIZE_T& offset)
 {
     FTCHARToUTF8 Convert(*str);
     uint16 length = static_cast<uint16>(Convert.Length());
+
+    // Write length in Little-Endian format
     push(buffer, length & 0xff, offset);
     push(buffer, (length >> 8) & 0xff, offset);
     
@@ -36,24 +55,30 @@ void OptimizedBinaryPacketSerializer::SerializeString(TArray<uint8>* buffer, con
         push(buffer, static_cast<uint8>(CharArray[i]), offset);
     }
 }
-// uint8 직렬화
+
 void OptimizedBinaryPacketSerializer::SerializeUInt8(TArray<uint8>* buffer, uint8 value, SIZE_T& offset)
 {
     push(buffer, value, offset);
 }
-// int16 직렬화 (리틀 엔디안)
+
+/**
+ * @brief Serializes a 16-bit signed integer in Little-Endian format.
+ */
 void OptimizedBinaryPacketSerializer::SerializeInt16(TArray<uint8>* buffer, int16 value, SIZE_T& offset)
 {
     push(buffer, value & 0xff, offset);
     push(buffer, (value >> 8) & 0xff, offset);
 }
-// uint16 직렬화 (리틀 엔디안)
+
 void OptimizedBinaryPacketSerializer::SerializeUInt16(TArray<uint8>* buffer, uint16 value, SIZE_T& offset)
 {
     push(buffer, value & 0xff, offset);
     push(buffer, (value >> 8) & 0xff, offset);
 }
-// int32 직렬화 (리틀 엔디안)
+
+/**
+ * @brief Serializes a 32-bit signed integer in Little-Endian format.
+ */
 void OptimizedBinaryPacketSerializer::SerializeInt32(TArray<uint8>* buffer, int32 value, SIZE_T& offset)
 {
     push(buffer, value & 0xff, offset);
@@ -61,7 +86,7 @@ void OptimizedBinaryPacketSerializer::SerializeInt32(TArray<uint8>* buffer, int3
     push(buffer, (value >> 16) & 0xff, offset);
     push(buffer, (value >> 24) & 0xff, offset);
 }
-// uint32 직렬화 (리틀 엔디안)
+
 void OptimizedBinaryPacketSerializer::SerializeUInt32(TArray<uint8>* buffer, uint32 value, SIZE_T& offset)
 {
     push(buffer, value & 0xff, offset);
@@ -69,23 +94,30 @@ void OptimizedBinaryPacketSerializer::SerializeUInt32(TArray<uint8>* buffer, uin
     push(buffer, (value >> 16) & 0xff, offset);
     push(buffer, (value >> 24) & 0xff, offset);
 }
-// float 직렬화 (비트 동일 저장)
+
+/**
+ * @brief Serializes a float by preserving its bit representation (IEEE 754).
+ */
 void OptimizedBinaryPacketSerializer::SerializeFloat(TArray<uint8>* buffer, float value, SIZE_T& offset)
 {
     uint32 floatAsInt = *reinterpret_cast<uint32*>(&value);
     SerializeInt32(buffer, static_cast<int32>(floatAsInt), offset);
 }
-// bool 직렬화
+
 void OptimizedBinaryPacketSerializer::SerializeBool(TArray<uint8>* buffer, bool value, SIZE_T& offset)
 {
     push(buffer, value ? 1 : 0, offset);
 }
-// 비트 플래그 직렬화
+
 void OptimizedBinaryPacketSerializer::SerializeBitFlags(TArray<uint8>* buffer, uint8 flags, SIZE_T& offset)
 {
     push(buffer, flags ? 1 : 0, offset);
 }
-// 문자열 벡터 직렬화: 개수(uint8) + 각 문자열
+
+/**
+ * @brief Serializes an array of strings.
+ * Format: [1-byte Count (uint8_t)] + [Serialized Strings...]
+ */
 void OptimizedBinaryPacketSerializer::SerializeStringVector(TArray<uint8>* buffer, const TArray<FString>& vec, SIZE_T& offset)
 {
     SerializeUInt8(buffer, static_cast<uint8>(vec.Num()), offset);
@@ -94,15 +126,24 @@ void OptimizedBinaryPacketSerializer::SerializeStringVector(TArray<uint8>* buffe
         SerializeString(buffer, str, offset);
     }
 }
-// 패킷 타입 변경: SecurePacketHeader의 type 필드만 변경
+
+/**
+ * @brief Directly modifies the packet type in the SecurePacketHeader.
+ */
 void OptimizedBinaryPacketSerializer::ChangePacket(TArray<uint8>& data, PacketType Change_type)
 {
     SecurePacketHeader* header = reinterpret_cast<SecurePacketHeader*>(data.GetData());
     header->type = static_cast<uint8>(Change_type);
 }
-// SecurePacket 파싱 및 무결성 검증(매직, 버전, 사이즈, XXHash)
+
+/**
+ * @brief Parses a raw buffer into a SecurePacket while performing rigorous integrity checks.
+ * Validates Magic Number, Protocol Version, Data Size, and XXHash.
+ * * @return True if the packet is valid and integrity is verified.
+ */
 bool OptimizedBinaryPacketSerializer::ParseSecurePacket(const TArray<uint8>& data, PacketType& out_type, CompactBinaryReader* out_reader)
 {
+    // 1. Boundary Check: Header size
     if (data.Num() < sizeof(SecurePacketHeader))
     {
         return false;
@@ -110,11 +151,13 @@ bool OptimizedBinaryPacketSerializer::ParseSecurePacket(const TArray<uint8>& dat
 
     const SecurePacketHeader* header = reinterpret_cast<const SecurePacketHeader*>(data.GetData());
 
+    // 2. Protocol Validation: Magic Number and Version
     if (header->magic != MAGIC_NUMBER || header->version != VERSION)
     {
         return false;
     }
 
+    // 3. Boundary Check: Payload size consistency
     if (data.Num() < sizeof(SecurePacketHeader) + header->data_size)
     {
         return false;
@@ -123,27 +166,32 @@ bool OptimizedBinaryPacketSerializer::ParseSecurePacket(const TArray<uint8>& dat
     const uint8* payload_ptr = data.GetData() + sizeof(SecurePacketHeader);
     SIZE_T payload_size = header->data_size;
 
+    // 4. Integrity Check: XXHash verification
     uint32 calculated_hash = XXHash32::hash(payload_ptr, payload_size);
-
     if (calculated_hash != header->xxhash)
     {
         return false;
     }
 
+    // 5. Semantic Check: Packet Type range
     if (static_cast<PacketType>(header->type) >= PacketType::MaxPacketSize)
     {
         return false;
     }
     
+    // Initialize the reader with the verified payload
     out_reader->Init(payload_ptr, payload_size);
     out_type = static_cast<PacketType>(header->type);
     
     return true;
 }
-// FUserAuthData 역직렬화
+
+/**
+ * @brief Specialized deserialization for FUserAuthData.
+ */
 template <>
 void OptimizedBinaryPacketSerializer::DeserializePacket<FUserAuthData>(CompactBinaryReader& reader, FUserAuthData& data)
 {
-    data.hash=reader.ReadStringArray();
+    data.hash = reader.ReadStringArray();
     return;
 }
