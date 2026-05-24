@@ -1,37 +1,40 @@
-// GUI 윈도우 구현부
+/**
+ * @file window.cpp
+ * @brief Implementation of the Win32 window abstraction and message loop.
+ */
+
 #include "window.h"
 #include "../guicontrol/GuiControl.h"
 
-window::window()
-{
+// Forward declaration of the ImGui Win32 message handler
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-}
+window::window() {}
+window::~window() {}
 
-window::~window()
-{
-}
-
-// 윈도우 프로시저 (Win32 메시지 처리)
+/**
+ * @brief Static Window Procedure (Callback) to process Win32 messages.
+ * Integrates ImGui input handling and implements custom frameless window dragging.
+ */
 LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    static bool isMinimized = false;   // 최소화 상태
-    static bool isDragging = false;    // 드래그 중 여부
-    static POINT dragStartPoint;       // 드래그 시작 지점
-    static POINT windowStartPoint;     // 윈도우 시작 위치
+    static bool isMinimized = false;      // Tracking minimization state
+    static bool isDragging = false;       // Flag for custom window dragging
+    static POINT dragStartPoint;          // Initial click offset within the window
+    static POINT windowStartPoint;        // Initial cursor position
 
-    // ImGui 메시지 처리 (마우스, 키보드 입력 등)
+    // Pass messages to ImGui (Mouse, Keyboard, etc.)
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
 
     switch (msg)
     {
-
     case WM_SYSCOMMAND:
-        // ALT 메뉴 비활성화
+        // Disable the ALT menu (System Menu) to prevent unintended focus shifts
         if ((wParam & 0xfff0) == SC_KEYMENU)
             return 0;
 
-        // 최소화 처리
+        // Custom minimization handling
         if (wParam == SC_MINIMIZE)
         {
             ::ShowWindow(hWnd, SW_MINIMIZE);
@@ -40,17 +43,18 @@ LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         }
         break;
 
-        // 크기 조정 시작
     case WM_ENTERSIZEMOVE:
         isMinimized = false;
         ::ShowWindow(hWnd, SW_RESTORE);
         return 0;
 
-        // 크기 조정 종료
     case WM_EXITSIZEMOVE:
         return 0;
 
-        // 히트 테스트 (리사이즈, 드래그 처리)
+    /**
+     * @section Hit_Testing
+     * Ensures the entire top area behaves like a title bar for system drag-and-drop.
+     */
     case WM_NCHITTEST:
     {
         LRESULT hitTest = DefWindowProc(hWnd, WM_NCHITTEST, wParam, lParam);
@@ -60,17 +64,18 @@ LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             return hitTest;
     }
 
-    // 윈도우 닫기
     case WM_CLOSE:
         ::DestroyWindow(hWnd);
         return 0;
 
-        // 윈도우 파괴
     case WM_DESTROY:
         ::PostQuitMessage(0);
         return 0;
 
-        // 마우스 왼쪽 버튼 누름 (드래그 시작)
+    /**
+     * @section Custom_Dragging_Logic
+     * Manual window repositioning logic for WS_POPUP (Frameless) style windows.
+     */
     case WM_LBUTTONDOWN:
     {
         if (!isMinimized)
@@ -79,17 +84,20 @@ LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             GetCursorPos(&cursorPos);
             windowStartPoint.x = cursorPos.x;
             windowStartPoint.y = cursorPos.y;
+
             RECT windowRect;
             GetWindowRect(hWnd, &windowRect);
+            
+            // Calculate offset between cursor and window top-left corner
             dragStartPoint.x = cursorPos.x - windowRect.left;
             dragStartPoint.y = cursorPos.y - windowRect.top;
 
             isDragging = true;
+            SetCapture(hWnd); // Ensure mouse events are captured during movement
         }
     }
     return 0;
 
-    // 마우스 왼쪽 버튼 떼기 (드래그 종료)
     case WM_LBUTTONUP:
     {
         isDragging = false;
@@ -97,13 +105,14 @@ LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     }
     return 0;
 
-    // 마우스 이동 (드래그 중이면 윈도우 이동)
     case WM_MOUSEMOVE:
     {
         if (!isMinimized && isDragging)
         {
             POINT cursorPos;
             GetCursorPos(&cursorPos);
+
+            // Dynamically reposition the window based on cursor movement
             SetWindowPos(hWnd, nullptr,
                 cursorPos.x - dragStartPoint.x,
                 cursorPos.y - dragStartPoint.y,
@@ -114,51 +123,51 @@ LRESULT __stdcall window::SWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     return 0;
     }
 
-    // 기본 메시지 처리
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-// GUI 메시지 루프
+/**
+ * @brief High-performance message loop and real-time rendering entry point.
+ * @param hInstance Instance handle from WinMain.
+ */
 void window::Update(HINSTANCE hInstance)
 {
-    // 윈도우 초기화
-    if (!init(hInstance))return;
+    // Bootstrap the Win32 window components
+    if (!init(hInstance)) return;
     done.store(true);
 
-    // 메시지 루프
+    // Monolithic Rendering and Message Loop
     while (done.load())
     {
         MSG msg;
 
-        // 메시지 큐에서 메시지 가져오기
+        // Non-blocking message polling for high-throughput rendering
         while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
         {
-            ::TranslateMessage(&msg);  // 가상 키 메시지를 문자 메시지로 변환
-            ::DispatchMessage(&msg);   // 윈도우 프로시저로 전달
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
 
-            // WM_QUIT 메시지 처리
             if (msg.message == WM_QUIT)
                 done.store(false);
         }
 
-        // 메시지 루프 종료 확인
         if (!done.load())
             break;
 
-        // GUI 렌더링
+        // Orchestrate GUI Rendering and D3D11 Presentation
         G_GuiControl->Render();
-
-        // 화면 표시
         G_GuiControl->Presents();
     }
 }
 
-// 윈도우 초기화
+/**
+ * @brief Configures and spawns the main Win32 window with WS_POPUP style.
+ */
 bool window::init(HINSTANCE hInstance)
 {
     std::wstring ClassName = L"MafiaClient";
 
-    // WNDCLASSEXW 구조체 초기화
+    // Initialize WNDCLASSEXW structure
     memset(&Wc, 0, sizeof(WNDCLASSEXW));
     Wc.cbSize = sizeof(WNDCLASSEXW);
     Wc.style = CS_CLASSDC;
@@ -173,71 +182,52 @@ bool window::init(HINSTANCE hInstance)
     Wc.lpszClassName = ClassName.c_str();
     Wc.hIconSm = NULL;
 
-    // 윈도우 클래스 등록
-    ::RegisterClassExW(&Wc);
-    ::RegisterClassExW(&Wc);
+    // Register window class with the operating system
+    if (!::RegisterClassExW(&Wc)) return false;
 
-    // 윈도우 크기 설정
+    // Standard high-definition resolution for the client
     WindowSize = ImVec2(1280, 800);
 
-    // 윈도우 생성 (팝업 스타일, 테두리 없음)
-    Hwnd = ::CreateWindowW(Wc.lpszClassName, ClassName.c_str(), WS_POPUP | CW_USEDEFAULT, 0, 0,
-        WindowSize.x,
-        WindowSize.y, NULL, NULL, Wc.hInstance, NULL);
+    // Create a frameless (WS_POPUP) window centered in screen coordinates
+    Hwnd = ::CreateWindowW(Wc.lpszClassName, ClassName.c_str(), WS_POPUP, 
+        0, 0,
+        static_cast<int>(WindowSize.x),
+        static_cast<int>(WindowSize.y), 
+        NULL, NULL, Wc.hInstance, NULL);
 
-    // 윈도우 생성 실패 처리
     if (!Hwnd)
     {
         DWORD error = GetLastError();
         char buffer[256];
         sprintf_s(buffer, "CreateWindowW failed. Error code: %lu", error);
-        MessageBoxA(NULL, buffer, "ERROR", MB_OK);
+        MessageBoxA(NULL, buffer, "Critical Error", MB_OK);
         return false;
     }
 
-    RECT rc = { 0 };
-
-    // 윈도우 크기 가져오기
-    if (!GetWindowRect(Hwnd, &rc))
-    {
-        MessageBoxA(NULL, "Faild to GetWindowRect", "ERROR", MB_ERR_INVALID_CHARS);
-        return false;
-    }
-
-    // 화면 중앙에 배치
+    // Centering Logic: Calculate screen-relative coordinates
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    int windowWidth = static_cast<int>(WindowSize.x);
-    int windowHeight = static_cast<int>(WindowSize.y);
-    int posX = (screenWidth - windowWidth) / 2;
-    int posY = (screenHeight - windowHeight) / 2;
-
+    int posX = (screenWidth - static_cast<int>(WindowSize.x)) / 2;
+    int posY = (screenHeight - static_cast<int>(WindowSize.y)) / 2;
 
     ::SetWindowPos(Hwnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-
-
     ::ShowWindow(Hwnd, SW_SHOWDEFAULT);
 
-    // 윈도우 업데이트
-    if (!::UpdateWindow(Hwnd))
+    if (!::UpdateWindow(Hwnd)) return false;
+
+    // Initialize the D3D11 and ImGui backends via GuiControl
+    if (!G_GuiControl->Initialize(Hwnd))
     {
-        MessageBoxA(NULL, "Faild to UpdateWindow", "ERROR", MB_ERR_INVALID_CHARS);
+        MessageBoxA(NULL, "Failed to initialize DirectX/GUI context", "Initialization Error", MB_OK);
         return false;
     }
 
-    // GUI 시스템 초기화 (ImGui, DirectX 등)
-    if (!G_GuiControl->Initialize(Hwnd))
-    {
-        MessageBoxA(NULL, "Failed to initialize GUI", "ERROR", MB_OK);
-        return false;
-    }
     return true;
 }
 
-// 리소스 정리
+/** @brief Cleans up core window resources and terminates the loop. */
 void window::Release()
 {
-    // GUI 시스템 정리
     G_GuiControl->Cleanup();
     done.store(false);
 }
