@@ -1,19 +1,26 @@
-// CRC32 기반 프로세스 코드 무결성 검증
-// .text 및 .rdata 섹션을 256바이트 단위로 분할하여 CRC32 해시 생성
+/**
+ * @file crc.h
+ * @brief Header for CRC32-based process code integrity verification.
+ * @details Manages code section analysis (.text, .rdata) and background memory monitoring.
+ */
+
 #pragma once
 #include <ntddk.h>
 #include "../Context/ProcessCodeHash/ProcessCodeHash.h"
 
-// 전역 변수 선언
-extern ULONG g_SelfFunctionSize;                 // 함수 크기 (미사용)
-extern PROCESS_CODE_HASH g_process_code_hash[10];  // 프로세스별 코드 해시 배열
-extern ULONG g_process_code_hashCount;           // 등록된 프로세스 개수
-extern ULONG CRC32Table[256];                    // CRC32 룩업 테이블
-extern BOOLEAN CRC32Initialized;                 // CRC32 테이블 초기화 여부
-extern BOOLEAN g_IntegrityCheckRunning;          // 무결성 검증 스레드 실행 여부
-extern PKTHREAD g_IntegrityCheckThread;          // 무결성 검증 스레드 객체
+// --- Global Variables ---
 
-// 언더큐먼트 함수 선언
+extern ULONG g_SelfFunctionSize;                  /**< Function size (reserved). */
+extern PROCESS_CODE_HASH g_process_code_hash[10]; /**< Storage for code hashes of protected processes. */
+extern ULONG g_process_code_hashCount;            /**< Number of currently monitored processes. */
+extern ULONG CRC32Table[256];                     /**< Lookup table for fast CRC32 calculation. */
+extern BOOLEAN CRC32Initialized;                  /**< Initialization flag for CRC32 table. */
+extern BOOLEAN g_IntegrityCheckRunning;           /**< Flag for background integrity thread status. */
+extern PKTHREAD g_IntegrityCheckThread;           /**< Thread object for the integrity monitor. */
+
+// --- Undocumented/Internal API Declarations ---
+
+/** @brief Attaches the current thread to the address space of the target process. */
 NTKERNELAPI
 VOID
 KeStackAttachProcess(
@@ -21,18 +28,21 @@ KeStackAttachProcess(
     _Out_ PKAPC_STATE ApcState
 );
 
+/** @brief Detaches the current thread from the address space of a process. */
 NTKERNELAPI
 VOID
 KeUnstackDetachProcess(
     _In_ PKAPC_STATE ApcState
 );
 
+/** @brief Retrieves the PEB (Process Environment Block) pointer for a process. */
 NTKERNELAPI
 PPEB
 PsGetProcessPeb(
     _In_ PEPROCESS Process
 );
 
+/** @brief Copies virtual memory from a source process to the current process. */
 NTKERNELAPI
 NTSTATUS
 MmCopyVirtualMemory(
@@ -45,24 +55,42 @@ MmCopyVirtualMemory(
     _Out_ PSIZE_T ReturnSize
 );
 
-// 무결성 검증 시스템 초기화 및 종료
+// --- Integrity Verification System Lifecycle ---
+
+/** @brief Initializes the integrity monitoring system and spawns a monitor thread. */
 NTSTATUS InitializeIntegrityCheck(VOID);
+
+/** @brief Stops the integrity monitoring thread and releases allocated resources. */
 VOID StopIntegrityCheck(VOID);
 
-// CRC32 관련 함수
+// --- CRC32 Calculation Utilities ---
+
+/** @brief Initializes the CRC32 lookup table. */
 VOID InitializeCRC32Table(VOID);
+
+/** @brief Calculates a CRC32 checksum for a given memory buffer. */
 ULONG CalculateCRC32(PUCHAR Data, ULONG Length);
 
-// 프로세스 메모리 읽기
+// --- Memory Access Interface ---
+
+/** @brief Reads raw memory from a target process safely. */
 NTSTATUS ReadProcessMemory(PEPROCESS Process, PVOID Address, PVOID Buffer, SIZE_T Size);
 
-// PE 파싱 및 코드 섹션 추출
+// --- PE Parsing and Code Analysis ---
+
+/** @brief Locates the base address of the main module (image base) for a given process. */
 PVOID GetProcessMainModuleBase(PEPROCESS Process);
+
+/** @brief Analyzes PE headers to identify executable sections (.text, .rdata). */
 ULONG FindCodeSections(PEPROCESS Process, PVOID ImageBase, CODE_SECTION_INFO Sections[2]);
 
-// 프로세스 코드 해시 생성 및 검증
+// --- Hash Generation and Monitoring ---
+
+/** @brief Performs initial CRC32 hash calculation for process sections and saves state. */
 NTSTATUS AddCRC(HANDLE ProcessId);
+
+/** @brief Re-verifies process memory against stored CRC32 hashes. */
 BOOLEAN ComputeProcessCodeHash(PPROCESS_CODE_HASH hashInfo);
 
-// 무결성 검증 스레드 루틴 (10초마다 검증)
+/** @brief Background thread routine for periodic (10s) integrity verification. */
 VOID IntegrityCheckThreadRoutine(PVOID Context);
