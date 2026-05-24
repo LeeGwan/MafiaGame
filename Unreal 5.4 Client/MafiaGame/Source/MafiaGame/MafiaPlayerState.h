@@ -1,61 +1,79 @@
-// MafiaPlayerState.h
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "MafiaPlayerState.generated.h"
 
-// 직업 타입
+/**
+ * @enum EJobType
+ * @brief Defines specialized roles within the Mafia Game.
+ */
 UENUM(BlueprintType)
 enum class EJobType : uint8
 {
-    None,       // 미할당
-    Mafia,      // 마피아 (밤에 시민 죽임)
-    Police,     // 경찰 (밤에 마피아 조사)
-    Detective,  // 탐정 (밤에 방문자 조사)
-    Citizen     // 시민 (특수 능력 없음)
+    None,       // Unassigned state
+    Mafia,      // Faction: Mafia - Objective: Eliminate citizens at night
+    Police,     // Faction: Citizen - Ability: Investigate a player to reveal if they are Mafia
+    Detective,  // Faction: Citizen - Ability: Surveillance (Tracks who a player visited at night)
+    Citizen     // Faction: Citizen - No special abilities
 };
 
-// 마피아 게임 플레이어 상태 (네트워크 복제)
+/**
+ * @class AMafiaPlayerState
+ * @brief Manages synchronized player data, role status, and action outcomes.
+ * Handles network replication for gameplay-critical information within the MafiaGame framework.
+ */
 UCLASS()
 class MAFIAGAME_API AMafiaPlayerState : public APlayerState
 {
     GENERATED_BODY()
 
 protected:
+    /** Unique session hash used for cross-session player identification */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    FString PlayerHash; // 플레이어 세션 토큰
+    FString PlayerHash;
 
+    /** The specific job role assigned to this player */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    EJobType JobType; // 할당된 직업
+    EJobType JobType;
 
-    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    bool bIsAlive; // 생존 여부
+    /** Survival status; triggers OnRep_IsAlive on clients when changed */
+    UPROPERTY(ReplicatedUsing = OnRep_IsAlive, BlueprintReadOnly, Category = "Player State")
+    bool bIsAlive;
 
+    /** Total number of votes received during the voting phase */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    int32 VoteCount; // 받은 투표 수
+    int32 VoteCount;
 
+    /** The session ID of the player targeted by this player's night ability */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    FString TargetPlayerId; // 밤 행동 대상 ID
+    FString TargetPlayerId;
 
+    /** The designated spawn coordinates assigned by the server */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    FVector SpawnPosition; // 스폰 위치
+    FVector SpawnPosition;
 
+    /** [Police Only] Cached result of the last investigation (True if target is Mafia) */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    bool bInvestigationResult; // 경찰 조사 결과 (true: 마피아)
+    bool bInvestigationResult;
 
+    /** [Detective Only] surveillance data revealing the target's night-time movement/visit */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    FString VisitInfo; // 탐정 조사 결과 (방문자 정보)
+    FString VisitInfo;
 
+    /** The player's display name, synchronized via network */
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Player State")
-    FString PlayerNickName; // 플레이어 닉네임
+    FString PlayerNickName;
 
 public:
     AMafiaPlayerState();
 
+    /** Registers properties for network synchronization (DOREPLIFETIME) */
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    // Getters
+    /** Getters */
     UFUNCTION(BlueprintCallable, Category = "Player State")
     FVector GetSpawnPosition() const { return SpawnPosition; }
 
@@ -77,14 +95,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Player State")
     FString GetTargetPlayerId() const { return TargetPlayerId; }
 
+    /** Returns the readable string representation of the job name */
     UFUNCTION(BlueprintCallable, Category = "Player State")
     FString GetJobName() const;
 
-    // 밤 행동 가능 여부 확인
+    /** Validates if the player's role is capable of performing actions during the night phase */
     UFUNCTION(BlueprintCallable, Category = "Player State")
     bool CanNightAction();
 
-    // Setters (서버 전용)
+    /** Setters (Strictly Authority/Server-Only) */
     void SetSpawnPosition(const FVector& POS);
     void SetPlayerHash(const FString& Hash);
     void SetNickName(const FString& NickName);
@@ -98,28 +117,34 @@ public:
     void SetInvestigationResult(bool bIsMafia);
     void SetVisitInfo(const FString& Info);
 
-    // 클라이언트 RPC
+    /** Client RPCs - Notification Handlers */
+    
+    /** [Client RPC] Notifies the player of their assigned role at start of session */
     UFUNCTION(Client, Reliable)
     void ClientNotifyJobAssigned(EJobType AssignedJob);
 
+    /** [Client RPC] Delivers private investigation results to the Police player */
     UFUNCTION(Client, Reliable)
     void ClientNotifyInvestigationResult(const FString& TargetId, bool bIsMafia);
 
+    /** [Client RPC] Delivers surveillance/visit data to the Detective player */
     UFUNCTION(Client, Reliable)
     void ClientNotifyVisitInfo(const FString& Info);
 
-    // 생존 상태 변경 시 호출
+    /** Replication Notify: Triggered on clients when the survival status changes */
     UFUNCTION()
     void OnRep_IsAlive();
 
-    // 모든 캐릭터 가시성 업데이트
+    /** * @brief Refreshes actor visibility for "Ghost Mode".
+     * Living players cannot see the deceased; dead players can spectate all.
+     */
     void UpdateAllCharacterVisibility();
 
-    // 채팅 메시지 수신 (클라이언트 RPC)
+    /** [Client RPC] Processes received chat messages and routes them to the local UI */
     UFUNCTION(Client, Reliable)
     void ClientReceiveChatMessage(const FString& SenderHash, const FString& SenderName, const FString& Message, bool bSenderIsDead, FLinearColor MessageColor);
 
-    // 채팅 메시지 수신 델리게이트
+    /** Delegate for chat events; allows Blueprint UI to bind to incoming messages */
     DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnChatMessageReceived, FString, SenderHash, FString, SenderName, FString, Message, bool, bSenderIsDead, FLinearColor, MessageColor);
 
     UPROPERTY(BlueprintAssignable, Category = "Chat")
