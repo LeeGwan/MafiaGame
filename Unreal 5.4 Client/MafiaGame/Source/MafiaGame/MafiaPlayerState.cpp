@@ -4,6 +4,9 @@
 #include "Net/UnrealNetwork.h"
 #include "DedicatedCharacter.h"
 
+/**
+ * @brief Constructor: Initializes player-specific game data to default values.
+ */
 AMafiaPlayerState::AMafiaPlayerState()
 {
     PlayerHash = TEXT("");
@@ -13,10 +16,13 @@ AMafiaPlayerState::AMafiaPlayerState()
     TargetPlayerId = TEXT("");
     bInvestigationResult = false;
     VisitInfo = TEXT("");
-    SpawnPosition = { 0.0f,0.0f,0.0f };
+    SpawnPosition = FVector::ZeroVector;
 }
 
-// 네트워크 복제 속성 등록
+/**
+ * @brief Registers properties for network replication using Unreal's DOREPLIFETIME.
+ * Critical for maintaining synchronized player data across the server and all clients.
+ */
 void AMafiaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -31,32 +37,38 @@ void AMafiaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(AMafiaPlayerState, SpawnPosition);
 }
 
-// 직업명 반환
+/**
+ * @brief Returns the string representation of the player's assigned job.
+ */
 FString AMafiaPlayerState::GetJobName() const
 {
     switch (JobType)
     {
-    case EJobType::Mafia: return TEXT("Mafia");
-    case EJobType::Police: return TEXT("Police");
+    case EJobType::Mafia:     return TEXT("Mafia");
+    case EJobType::Police:    return TEXT("Police");
     case EJobType::Detective: return TEXT("Detective");
-    case EJobType::Citizen: return TEXT("Citizen");
-    default: return TEXT("None");
+    case EJobType::Citizen:   return TEXT("Citizen");
+    default:                  return TEXT("None");
     }
 }
 
-// 밤 행동 가능 여부 확인 (마피아/경찰/탐정만 가능)
+/**
+ * @brief Determines if the player's role is eligible for a specialized night-phase action.
+ */
 bool AMafiaPlayerState::CanNightAction()
 {
     switch (JobType)
     {
-    case EJobType::Mafia: return true;
-    case EJobType::Police: return true;
+    case EJobType::Mafia:
+    case EJobType::Police:
     case EJobType::Detective: return true;
-    default: return false;
+    default:                  return false;
     }
 }
 
-// 스폰 위치 설정 (서버 전용)
+/**
+ * @brief Sets the assigned world spawn position (Authority Only).
+ */
 void AMafiaPlayerState::SetSpawnPosition(const FVector& POS)
 {
     if (HasAuthority())
@@ -65,7 +77,9 @@ void AMafiaPlayerState::SetSpawnPosition(const FVector& POS)
     }
 }
 
-// 플레이어 세션 토큰 설정 (서버 전용)
+/**
+ * @brief Sets the unique session hash for player identification (Authority Only).
+ */
 void AMafiaPlayerState::SetPlayerHash(const FString& Hash)
 {
     if (HasAuthority())
@@ -74,7 +88,9 @@ void AMafiaPlayerState::SetPlayerHash(const FString& Hash)
     }
 }
 
-// 닉네임 설정 (서버 전용)
+/**
+ * @brief Sets the player's display nickname (Authority Only).
+ */
 void AMafiaPlayerState::SetNickName(const FString& NickName)
 {
     if (HasAuthority())
@@ -83,7 +99,9 @@ void AMafiaPlayerState::SetNickName(const FString& NickName)
     }
 }
 
-// 직업 설정 (서버 전용)
+/**
+ * @brief Assigns a job role to the player (Authority Only).
+ */
 void AMafiaPlayerState::SetJobType(EJobType NewJobType)
 {
     if (HasAuthority())
@@ -92,13 +110,16 @@ void AMafiaPlayerState::SetJobType(EJobType NewJobType)
     }
 }
 
-// 생존 상태 설정 (서버 전용)
+/**
+ * @brief Updates the player's survival status and refreshes world visibility (Authority Only).
+ */
 void AMafiaPlayerState::SetAlive(bool bAlive)
 {
     if (HasAuthority())
     {
         bIsAlive = bAlive;
 
+        // If the player dies, immediately update visibility for the local client
         if (!bIsAlive)
         {
             UpdateAllCharacterVisibility();
@@ -106,7 +127,9 @@ void AMafiaPlayerState::SetAlive(bool bAlive)
     }
 }
 
-// 투표 수 설정 (서버 전용)
+/**
+ * @brief Explicitly sets the current vote tally (Authority Only).
+ */
 void AMafiaPlayerState::SetVoteCount(int32 Count)
 {
     if (HasAuthority())
@@ -115,7 +138,9 @@ void AMafiaPlayerState::SetVoteCount(int32 Count)
     }
 }
 
-// 투표 추가 (서버 전용)
+/**
+ * @brief Increments the current vote tally by one (Authority Only).
+ */
 void AMafiaPlayerState::AddVote()
 {
     if (HasAuthority())
@@ -124,7 +149,9 @@ void AMafiaPlayerState::AddVote()
     }
 }
 
-// 투표 초기화 (서버 전용)
+/**
+ * @brief Resets the vote tally to zero (Authority Only).
+ */
 void AMafiaPlayerState::ResetVotes()
 {
     if (HasAuthority())
@@ -133,7 +160,9 @@ void AMafiaPlayerState::ResetVotes()
     }
 }
 
-// 대상 설정 (서버 전용)
+/**
+ * @brief Sets the ID of the target player for night actions (Authority Only).
+ */
 void AMafiaPlayerState::SetTarget(const FString& TargetId)
 {
     if (HasAuthority())
@@ -142,7 +171,9 @@ void AMafiaPlayerState::SetTarget(const FString& TargetId)
     }
 }
 
-// 대상 초기화 (서버 전용)
+/**
+ * @brief Clears the current night action target (Authority Only).
+ */
 void AMafiaPlayerState::ResetTarget()
 {
     if (HasAuthority())
@@ -151,7 +182,9 @@ void AMafiaPlayerState::ResetTarget()
     }
 }
 
-// 경찰 조사 결과 설정 (서버 전용)
+/**
+ * @brief Stores the outcome of a police investigation (Authority Only).
+ */
 void AMafiaPlayerState::SetInvestigationResult(bool bIsMafia)
 {
     if (HasAuthority())
@@ -160,7 +193,9 @@ void AMafiaPlayerState::SetInvestigationResult(bool bIsMafia)
     }
 }
 
-// 탐정 방문자 정보 설정 (서버 전용)
+/**
+ * @brief Records surveillance information for the Detective role (Authority Only).
+ */
 void AMafiaPlayerState::SetVisitInfo(const FString& Info)
 {
     if (HasAuthority())
@@ -169,13 +204,19 @@ void AMafiaPlayerState::SetVisitInfo(const FString& Info)
     }
 }
 
-// 생존 상태 변경 시 호출 (네트워크 복제 콜백)
+/**
+ * @brief Replication notification for the survival status.
+ */
 void AMafiaPlayerState::OnRep_IsAlive()
 {
     UpdateAllCharacterVisibility();
 }
 
-// 모든 캐릭터 가시성 업데이트 (죽은 플레이어는 보이지 않음)
+/**
+ * @brief Core Visibility Logic: Implements "Ghost Mode" visibility rules.
+ * Living players cannot see dead players (ActorHiddenInGame = true).
+ * Dead players can see all participants (Ghost view).
+ */
 void AMafiaPlayerState::UpdateAllCharacterVisibility()
 {
     UWorld* World = GetWorld();
@@ -189,7 +230,7 @@ void AMafiaPlayerState::UpdateAllCharacterVisibility()
 
     bool bIAmAlive = MyPS->GetIsAlive();
 
-    // 모든 플레이어 순회
+    // Iterate through all player controllers in the session
     for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
     {
         APlayerController* PC = It->Get();
@@ -201,17 +242,12 @@ void AMafiaPlayerState::UpdateAllCharacterVisibility()
         APawn* Pawn = PC->GetPawn();
         if (!Pawn) continue;
 
-        // 내가 살아있으면 죽은 사람만 숨김, 내가 죽었으면 모두 보임
+        // Visibility Rule: 
+        // 1. If local player is alive, hide any dead actors to maintain game integrity.
+        // 2. If local player is dead, show all actors to allow spectating.
         if (bIAmAlive)
         {
-            if (!PS->GetIsAlive())
-            {
-                Pawn->SetActorHiddenInGame(true);
-            }
-            else
-            {
-                Pawn->SetActorHiddenInGame(false);
-            }
+            Pawn->SetActorHiddenInGame(!PS->GetIsAlive());
         }
         else
         {
@@ -220,31 +256,48 @@ void AMafiaPlayerState::UpdateAllCharacterVisibility()
     }
 }
 
-// 채팅 메시지 수신 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Receives a chat message from the server and broadcasts to UI.
+ */
 void AMafiaPlayerState::ClientReceiveChatMessage_Implementation(const FString& SenderHash, const FString& SenderName,
     const FString& Message, bool bSenderIsDead, FLinearColor MessageColor)
 {
     OnChatMessageReceived.Broadcast(SenderHash, SenderName, Message, bSenderIsDead, MessageColor);
 }
 
-// 직업 할당 알림 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Notifies the client of their assigned role at the start of the game.
+ */
 void AMafiaPlayerState::ClientNotifyJobAssigned_Implementation(EJobType AssignedJob)
 {
-    GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
-        FString::Printf(TEXT("[Client] 직업 할당: %s"), *GetJobName()));
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
+            FString::Printf(TEXT("Role Assigned: %s"), *GetJobName()));
+    }
 }
 
-// 경찰 조사 결과 알림 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Displays the results of the Police investigation to the local client.
+ */
 void AMafiaPlayerState::ClientNotifyInvestigationResult_Implementation(const FString& TargetId, bool bIsMafia)
 {
-    GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
-        FString::Printf(TEXT("[경찰] 플레이어 %s는 %s"),
-            *TargetId, bIsMafia ? TEXT("마피아입니다!") : TEXT("마피아가 아닙니다.")));
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Cyan,
+            FString::Printf(TEXT("[Police Report] Subject %s is %s"),
+                *TargetId, bIsMafia ? TEXT("MAFIA!") : TEXT("NOT Mafia.")));
+    }
 }
 
-// 탐정 조사 결과 알림 (클라이언트 RPC)
+/**
+ * @brief [Client RPC] Displays surveillance info gathered by the Detective to the local client.
+ */
 void AMafiaPlayerState::ClientNotifyVisitInfo_Implementation(const FString& Info)
 {
-    GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
-        FString::Printf(TEXT("[탐정] %s"), *Info));
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Yellow,
+            FString::Printf(TEXT("[Surveillance] %s"), *Info));
+    }
 }
