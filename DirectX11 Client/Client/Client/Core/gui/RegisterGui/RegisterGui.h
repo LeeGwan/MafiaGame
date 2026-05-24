@@ -1,10 +1,33 @@
-// 회원가입 화면 GUI
-#pragma once
-#include"../basegui/BaseGui.h"
+/**
+ * @file RegisterGui.h
+ * @brief Header for the account registration and user onboarding interface.
+ */
 
-class RegisterGui :public BaseGui
+#pragma once
+#include "../basegui/BaseGui.h"
+
+/**
+ * @class RegisterGui
+ * @brief UI component responsible for managing the user account creation workflow.
+ * * This class facilitates the secure collection of new user credentials, 
+ * including redundant password entry for input verification, before 
+ * dispatching the data to the authentication backend.
+ */
+class RegisterGui : public BaseGui
 {
 public:
-	using BaseGui::BaseGui;
-	void Render() override;  // 아이디/비밀번호/비밀번호 확인 입력 및 회원가입 버튼
+    /** * @brief Inherits constructors from BaseGui.
+     * Ensures the component has direct access to the global UI controller 
+     * and the underlying framework's core systems.
+     */
+    using BaseGui::BaseGui;
+
+    /**
+     * @brief Renders the registration form using the Dear ImGui framework.
+     * * Overrides the BaseGui Render method to provide:
+     * - Input buffers for User ID and primary Password.
+     * - A secondary verification buffer for Password confirmation.
+     * - Action triggers for the server-side "Sign Up" procedure.
+     */
+    void Render() override;
 };
